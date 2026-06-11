@@ -1,0 +1,166 @@
+╔════════════════════════════════════════════════════════════════╗
+║                                                                ║
+║   🖨️  SISTEM INVENTORY PERCETAKAN - PANDUAN CEPAT             ║
+║                                                                ║
+╚════════════════════════════════════════════════════════════════╝
+
+📌 LANGKAH INSTALL (3 MENIT)
+
+1️⃣  Buka: http://localhost/phpmyadmin
+    → Klik "Database"
+    → Buat database baru: db_inventory
+    → Klik database tersebut
+    → Klik "Import"
+    → Pilih file: database/db_inventory.sql
+    → Klik "Go"
+    ✅ Selesai!
+
+2️⃣  Buka browser: http://localhost/inventory_monitoring/login.php
+
+3️⃣  Login dengan akun demo:
+    Email    : admin@percetakan.com
+    Password : password
+
+4️⃣  Website sudah jalan! 🎉
+
+
+═══════════════════════════════════════════════════════════════
+
+🔐 AKUN DEMO
+
+┌─────────────────────────────────────────────────────────────┐
+│ ROLE       │ EMAIL                        │ PASSWORD        │
+├─────────────────────────────────────────────────────────────┤
+│ Admin      │ admin@percetakan.com         │ password        │
+│ Operator   │ operator1@percetakan.com     │ password        │
+│ Viewer     │ viewer@percetakan.com        │ password        │
+└─────────────────────────────────────────────────────────────┘
+
+💡 Baca CARA_LOGIN.md untuk panduan lengkap sistem login
+
+
+═══════════════════════════════════════════════════════════════
+
+📂 STRUKTUR FOLDER
+
+inventory_monitoring/
+│
+├── index.php              ← Website utama (buka di browser)
+├── MULAI_DARI_SINI.txt   ← File ini
+├── README.md              ← Panduan install & fitur
+├── PANDUAN_LENGKAP.md     ← Tutorial lengkap (wajib baca!)
+├── PENJELASAN_KODE.md     ← Cara kerja kode (untuk belajar)
+│
+├── css/
+│   └── app.css           ← Style (warna, layout, animasi)
+│
+├── js/
+│   └── app.js            ← Logic JavaScript
+│
+├── api/                  ← Backend PHP (REST API)
+│   ├── dashboard.php     ← API dashboard
+│   ├── items.php         ← API bahan baku
+│   ├── orders.php        ← API order
+│   └── (file lainnya)
+│
+├── config/
+│   └── database.php      ← Koneksi database
+│
+└── database/
+    └── db_inventory.sql  ← File SQL (struktur + data)
+
+
+═══════════════════════════════════════════════════════════════
+
+📚 DOKUMENTASI (Baca Sesuai Kebutuhan)
+
+┌─────────────────────────────────────────────────────────────┐
+│ FILE                    │ ISI                               │
+├─────────────────────────────────────────────────────────────┤
+│ README.md               │ Cara install + fitur website      │
+│ PANDUAN_LENGKAP.md      │ Tutorial lengkap step-by-step     │
+│ PENJELASAN_KODE.md      │ Cara kerja kode (belajar coding)  │
+│ MULAI_DARI_SINI.txt     │ File ini (panduan cepat)          │
+└─────────────────────────────────────────────────────────────┘
+
+💡 REKOMENDASI:
+- Pemula → Baca: README.md + PANDUAN_LENGKAP.md
+- Belajar coding → Baca: PENJELASAN_KODE.md
+- Udah paham → Langsung buka index.php
+
+
+═══════════════════════════════════════════════════════════════
+
+🎯 FITUR UTAMA WEBSITE
+
+✅ Dashboard - Ringkasan data & chart
+✅ Monitoring Realtime - Status mesin + Kanban order
+✅ Bahan Baku - Kelola inventory (stok, kategori, dll)
+✅ Mutasi Stok - Stok masuk/keluar + riwayat
+✅ Order Cetak - Buat order, update status
+✅ Mesin - Monitor status mesin produksi
+✅ Supplier - Data pemasok bahan
+✅ Pelanggan - Data pelanggan
+✅ Laporan - Export CSV
+
+
+═══════════════════════════════════════════════════════════════
+
+❓ TROUBLESHOOTING
+
+❌ Database gagal connect
+   → Cek MySQL Laragon sudah jalan (lampu hijau)
+   → Cek database db_inventory sudah diimport
+   → Cek config/database.php (username/password)
+
+❌ Data tidak muncul
+   → Tekan F12 di browser → tab "Console" → cek error
+   → Tab "Network" → cek request API (harus status 200)
+
+❌ Halaman blank/putih
+   → Cek C:\laragon\logs\apache_error.log
+
+❌ Chart tidak muncul
+   → Cek koneksi internet (Chart.js pakai CDN)
+
+
+═══════════════════════════════════════════════════════════════
+
+💻 TEKNOLOGI
+
+Frontend:  HTML5, CSS3, JavaScript (Vanilla)
+Backend:   PHP 8+ (PDO)
+Database:  MySQL 8+
+Chart:     Chart.js 4.4
+Icons:     Feather Icons
+Font:      Google Fonts (Inter)
+
+
+═══════════════════════════════════════════════════════════════
+
+🎓 COCOK UNTUK
+
+- Tugas akhir / skripsi mahasiswa
+- Belajar PHP & MySQL
+- Belajar REST API
+- Project percetakan kecil-menengah
+- Portfolio web developer
+
+
+═══════════════════════════════════════════════════════════════
+
+📞 BUTUH BANTUAN?
+
+1. Baca PANDUAN_LENGKAP.md (tutorial detail)
+2. Baca PENJELASAN_KODE.md (pahami cara kerja)
+3. Google: "Cara pakai Laragon untuk pemula"
+4. YouTube: "Tutorial PHP MySQL untuk pemula"
+
+
+═══════════════════════════════════════════════════════════════
+
+🚀 SELAMAT BELAJAR & SEMOGA SUKSES!
+
+Dibuat dengan ❤️ untuk belajar coding
+
+═══════════════════════════════════════════════════════════════
