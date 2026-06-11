@@ -217,18 +217,20 @@ function openQuickAdd() {
 // REF DATA LOADER
 // ============================================================
 async function loadRefData() {
-  const [cats, units, sups, custs, machs] = await Promise.all([
+  const [cats, units, sups, custs, machs, ops] = await Promise.all([
     apiFetch('api/categories.php'),
     apiFetch('api/units.php'),
     apiFetch('api/suppliers.php'),
     apiFetch('api/customers.php'),
     apiFetch('api/machines.php'),
+    apiFetch('api/dashboard.php?action=operators'),
   ]);
   refCategories = cats?.data || [];
   refUnits      = units?.data || [];
   refSuppliers  = sups?.data || [];
   refCustomers  = custs?.data || [];
   refMachines   = machs?.data || [];
+  refOperators  = ops?.data || [];
 }
 
 function populateFormSelects() {
@@ -258,6 +260,10 @@ function populateFormSelects() {
   const orderMach = document.getElementById('order-machine');
   orderMach.innerHTML = '<option value="">-- Pilih Mesin --</option>';
   refMachines.forEach(m => orderMach.innerHTML += `<option value="${m.id}">${m.name}</option>`);
+
+  const orderOp = document.getElementById('order-operator');
+  orderOp.innerHTML = '<option value="">-- Pilih Operator --</option>';
+  refOperators.forEach(o => orderOp.innerHTML += `<option value="${o.id}">${o.name}</option>`);
 
   const statusMach = document.getElementById('status-machine');
   statusMach.innerHTML = '<option value="">-- Tanpa Mesin --</option>';
@@ -806,10 +812,14 @@ function calcOrderTotal() {
 
 async function submitAddOrder(e) {
   e.preventDefault();
+  
+  // Cek permission
+  if (!checkPermission('create')) return;
+  
   const data = {
     customer_id: document.getElementById('order-customer').value,
     machine_id: document.getElementById('order-machine').value,
-    operator_id: '',
+    operator_id: document.getElementById('order-operator').value,
     title: document.getElementById('order-title').value,
     priority: document.getElementById('order-priority').value,
     quantity: document.getElementById('order-qty').value,
@@ -1021,38 +1031,105 @@ function renderSuppliersGrid(suppliers) {
       </div>
       ${s.contact_person ? `<div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">👤 ${s.contact_person}</div>` : ''}
       ${s.phone ? `<div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">📞 ${s.phone}</div>` : ''}
-      ${s.city ? `<div style="font-size:12px;color:var(--text-muted)">📍 ${s.city}</div>` : ''}
+      ${s.city ? `<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">📍 ${s.city}</div>` : ''}
+      <div style="display:flex;gap:4px;margin-top:auto;padding-top:8px;border-top:1px solid var(--border)">
+        <button class="btn btn-secondary btn-sm btn-icon" onclick="openEditSupplierModal(${s.id})" title="Edit"><i data-feather="edit-2"></i></button>
+        <button class="btn btn-danger btn-sm btn-icon" onclick="deleteSupplier(${s.id})" title="Hapus"><i data-feather="trash-2"></i></button>
+      </div>
     </div>
   `).join('');
+  feather.replace();
 }
 
-function openAddSupplierModal() { openModal('modal-add-supplier'); }
+function openAddSupplierModal() {
+  document.getElementById('modal-supplier-title').textContent = 'Tambah Supplier';
+  document.getElementById('supplier-id').value = '';
+  document.getElementById('sup-code').disabled = false;
+  document.querySelector('#modal-add-supplier form').reset();
+  openModal('modal-add-supplier');
+}
+
+async function openEditSupplierModal(id) {
+  const data = await apiFetch(`${API}suppliers.php?action=get&id=${id}`);
+  if (!data?.berhasil) {
+    showToast('Gagal mengambil data supplier', 'error');
+    return;
+  }
+  
+  const supplier = data.data;
+  document.getElementById('modal-supplier-title').textContent = 'Edit Supplier';
+  document.getElementById('supplier-id').value = supplier.id;
+  document.getElementById('sup-code').value = supplier.code;
+  document.getElementById('sup-code').disabled = true;
+  document.getElementById('sup-name').value = supplier.name;
+  document.getElementById('sup-contact').value = supplier.contact_person || '';
+  document.getElementById('sup-phone').value = supplier.phone || '';
+  document.getElementById('sup-email').value = supplier.email || '';
+  document.getElementById('sup-city').value = supplier.city || '';
+  document.getElementById('sup-address').value = supplier.address || '';
+  document.getElementById('sup-notes').value = supplier.notes || '';
+  
+  openModal('modal-add-supplier');
+  feather.replace();
+}
 
 async function submitAddSupplier(e) {
   e.preventDefault();
-  showToast('Supplier berhasil ditambahkan (demo)', 'success');
-  closeModal('modal-add-supplier');
-  e.target.reset();
+  
+  const supplierId = document.getElementById('supplier-id').value;
+  const isEdit = supplierId !== '';
+  
+  // Cek permission
+  if (isEdit && !checkPermission('edit')) return;
+  if (!isEdit && !checkPermission('create')) return;
+  
+  const data = {
+    code: document.getElementById('sup-code').value,
+    name: document.getElementById('sup-name').value,
+    contact_person: document.getElementById('sup-contact').value,
+    phone: document.getElementById('sup-phone').value,
+    email: document.getElementById('sup-email').value,
+    city: document.getElementById('sup-city').value,
+    address: document.getElementById('sup-address').value,
+    notes: document.getElementById('sup-notes').value,
+  };
+  
+  let res;
+  if (isEdit) {
+    data.id = supplierId;
+    res = await apiPut(`${API}suppliers.php`, data);
+  } else {
+    res = await apiPost(`${API}suppliers.php`, data);
+  }
+  
+  if (res?.berhasil) {
+    showToast(isEdit ? 'Supplier berhasil diupdate' : 'Supplier berhasil ditambahkan', 'success');
+    closeModal('modal-add-supplier');
+    e.target.reset();
+    document.getElementById('supplier-id').value = '';
+    document.getElementById('sup-code').disabled = false;
+    loadSuppliers();
+    loadRefData();
+  } else {
+    showToast(res?.pesan || 'Gagal menyimpan supplier', 'error');
+  }
 }
 
-// ============================================================
-// CUSTOMERS
-// ============================================================
-async function loadCustomers() {
-  const data = await apiFetch(API + 'customers.php');
-  const tbody = document.getElementById('customers-tbody');
-  const rows = data?.data || [];
-  tbody.innerHTML = rows.map(c => `
-    <tr>
-      <td style="font-family:monospace;font-size:12px;color:var(--accent)">${c.code}</td>
-      <td style="font-weight:600">${c.name}</td>
-      <td style="color:var(--text-muted)">${c.contact_person || '—'}</td>
-      <td style="color:var(--text-muted)">${c.phone || '—'}</td>
-      <td style="color:var(--text-muted)">${c.city || '—'}</td>
-      <td><button class="btn btn-secondary btn-sm">Detail</button></td>
-    </tr>
-  `).join('') || '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted)">Tidak ada data</td></tr>';
+async function deleteSupplier(id) {
+  // Cek permission
+  if (!checkPermission('delete')) return;
+  
+  if (!confirm('Hapus supplier ini?')) return;
+  const res = await apiFetch(`${API}suppliers.php?id=${id}`, { method: 'DELETE' });
+  if (res?.berhasil) {
+    showToast('Supplier berhasil dihapus', 'success');
+    loadSuppliers();
+  } else {
+    showToast('Gagal menghapus supplier', 'error');
+  }
 }
+
+// Fungsi loadCustomers sudah didefinisikan di atas, hapus duplikat ini
 
 // ============================================================
 // REPORTS

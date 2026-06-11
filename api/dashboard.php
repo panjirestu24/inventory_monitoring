@@ -7,6 +7,14 @@ header('Access-Control-Allow-Origin: *');
 require_once '../config/database.php';
 
 $pdo = db();
+$action = $_GET['action'] ?? 'dashboard';
+
+// Khusus untuk mendapatkan list operators
+if ($action === 'operators') {
+    $stmt = $pdo->query("SELECT id, name, email, role FROM users WHERE role IN ('admin', 'operator') AND is_active=1 ORDER BY name");
+    echo json_encode(['berhasil' => true, 'success' => true, 'data' => $stmt->fetchAll()]);
+    exit;
+}
 
 // --- STATISTIK RINGKASAN ---
 $stats = [];
@@ -38,7 +46,7 @@ $stmt = $pdo->query("SELECT COALESCE(SUM(grand_total),0) as revenue FROM orders 
 $stats['monthly_revenue'] = (float)$stmt->fetchColumn();
 
 // --- DAFTAR STATUS MESIN ---
-$stmt = $pdo->query("SELECT m.*, o.order_number, o.title as current_job FROM machines m LEFT JOIN orders o ON m.id=o.machine_id AND o.status='in_progress' ORDER BY m.code");
+$stmt = $pdo->query("SELECT m.*, o.order_number, o.title as current_job, u.name as operator_name FROM machines m LEFT JOIN orders o ON m.id=o.machine_id AND o.status='in_progress' LEFT JOIN users u ON o.operator_id=u.id ORDER BY m.code");
 $machines = $stmt->fetchAll();
 
 // --- ITEM STOK RENDAH (10 Teratas) ---
@@ -63,13 +71,15 @@ $notifications = $stmt->fetchAll();
 
 // Kirim semua data dalam format JSON
 echo json_encode([
+    'success'        => true,
     'berhasil'       => true,
     'stats'          => $stats,
-    'mesin'          => $machines,
-    'stok_rendah'    => $lowStock,
-    'order_terbaru'  => $recentOrders,
+    'machines'       => $machines,
+    'low_stock'      => $lowStock,
+    'recent_orders'  => $recentOrders,
     'chart_orders'   => $chartOrders,
     'chart_stock'    => $chartStock,
-    'notifikasi'     => $notifications,
+    'notifications'  => $notifications,
     'timestamp'      => date('Y-m-d H:i:s'),
 ]);
+

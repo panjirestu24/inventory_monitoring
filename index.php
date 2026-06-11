@@ -798,10 +798,11 @@ $userInfo = getUserInfo();
 <div class="modal-overlay" id="modal-add-supplier">
   <div class="modal">
     <div class="modal-header">
-      <div class="modal-title">Tambah Supplier</div>
+      <div class="modal-title" id="modal-supplier-title">Tambah Supplier</div>
       <button class="modal-close" onclick="closeModal('modal-add-supplier')"><i data-feather="x"></i></button>
     </div>
     <form onsubmit="submitAddSupplier(event)">
+      <input type="hidden" id="supplier-id" value="">
       <div class="form-row">
         <div class="form-group">
           <label class="form-label">Kode Supplier *</label>
@@ -835,6 +836,10 @@ $userInfo = getUserInfo();
       <div class="form-group">
         <label class="form-label">Alamat</label>
         <textarea class="form-control" id="sup-address" rows="2" placeholder="Alamat lengkap..."></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Catatan</label>
+        <textarea class="form-control" id="sup-notes" rows="2" placeholder="Catatan tambahan (opsional)..."></textarea>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" onclick="closeModal('modal-add-supplier')">Batal</button>

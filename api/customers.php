@@ -11,15 +11,15 @@ $action = $_GET['action'] ?? 'list';
 
 switch ($method) {
     case 'GET':
-        if ($action === 'list') {
+        if ($action === 'list' || $action === '') {
             $stmt = $pdo->query("SELECT * FROM customers WHERE is_active=1 ORDER BY name");
-            echo json_encode(['berhasil' => true, 'data' => $stmt->fetchAll()]);
+            echo json_encode(['success' => true, 'berhasil' => true, 'data' => $stmt->fetchAll()]);
         } elseif ($action === 'get') {
             $id = (int)($_GET['id'] ?? 0);
             $stmt = $pdo->prepare("SELECT * FROM customers WHERE id=?");
             $stmt->execute([$id]);
             $customer = $stmt->fetch();
-            echo json_encode(['berhasil' => (bool)$customer, 'data' => $customer]);
+            echo json_encode(['success' => true, 'berhasil' => (bool)$customer, 'data' => $customer]);
         }
         break;
     
@@ -36,7 +36,7 @@ switch ($method) {
             $data['address'] ?? '', 
             $data['notes'] ?? ''
         ]);
-        echo json_encode(['berhasil' => true, 'pesan' => 'Pelanggan berhasil ditambahkan', 'id' => $pdo->lastInsertId()]);
+        echo json_encode(['success' => true, 'berhasil' => true, 'pesan' => 'Pelanggan berhasil ditambahkan', 'message' => 'Pelanggan berhasil ditambahkan', 'id' => $pdo->lastInsertId()]);
         break;
     
     case 'PUT':
@@ -53,12 +53,12 @@ switch ($method) {
             $data['notes'] ?? '', 
             $id
         ]);
-        echo json_encode(['berhasil' => true, 'pesan' => 'Pelanggan berhasil diupdate']);
+        echo json_encode(['success' => true, 'berhasil' => true, 'pesan' => 'Pelanggan berhasil diupdate', 'message' => 'Pelanggan berhasil diupdate']);
         break;
     
     case 'DELETE':
         $id = (int)($_GET['id'] ?? 0);
         $pdo->prepare("UPDATE customers SET is_active=0 WHERE id=?")->execute([$id]);
-        echo json_encode(['berhasil' => true, 'pesan' => 'Pelanggan berhasil dihapus']);
+        echo json_encode(['success' => true, 'berhasil' => true, 'pesan' => 'Pelanggan berhasil dihapus', 'message' => 'Pelanggan berhasil dihapus']);
         break;
 }
