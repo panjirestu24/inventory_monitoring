@@ -492,60 +492,74 @@ $userInfo = getUserInfo();
             <!-- Detail Pesanan -->
             <div class="card" style="margin-bottom:20px">
               <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
-                <i data-feather="file-text"></i> Detail Pesanan
+                <i data-feather="shopping-cart"></i> Item Pesanan
               </div>
-              <!-- Pilih dari daftar produk -->
-              <div class="form-group">
-                <label class="form-label">Pilih Produk (opsional)</label>
-                <select class="form-control" id="ni-product-select" onchange="niPilihProduk(this.value)">
-                  <option value="">-- Pilih produk untuk isi otomatis --</option>
-                </select>
-                <div style="font-size:11px;color:var(--text-muted);margin-top:4px">
-                  Memilih produk akan mengisi judul & harga otomatis. Harga tetap bisa diubah.
+
+              <!-- Baris tambah item: dropdown + tombol -->
+              <div style="display:flex;gap:8px;align-items:flex-end;margin-bottom:12px">
+                <div style="flex:1">
+                  <label class="form-label">Pilih Produk</label>
+                  <select class="form-control" id="ni-product-select">
+                    <option value="">-- Pilih produk --</option>
+                  </select>
                 </div>
+                <button class="btn btn-primary btn-sm" onclick="niTambahItem()"
+                  style="padding:9px 14px;white-space:nowrap;flex-shrink:0">
+                  <i data-feather="plus"></i> Tambah
+                </button>
               </div>
-              <div class="divider"></div>
-              <div class="form-group">
-                <label class="form-label">Jenis / Judul Pekerjaan *</label>
-                <input class="form-control" id="ni-title" placeholder="Contoh: Cetak Spanduk 3x1m Full Color" />
+
+              <!-- Atau input manual -->
+              <div style="font-size:11px;color:var(--text-muted);margin-bottom:12px">
+                Tidak ada di daftar?
+                <button onclick="niTambahManual()" style="background:none;border:none;color:var(--primary-light);font-size:11px;cursor:pointer;text-decoration:underline;padding:0">
+                  Tambah item manual
+                </button>
               </div>
-              <div class="form-group">
-                <label class="form-label">Spesifikasi / Keterangan</label>
-                <textarea class="form-control" id="ni-desc" rows="2" placeholder="Bahan, finishing, warna, dll..."></textarea>
+
+              <!-- Tabel item pesanan -->
+              <div id="ni-items-empty" style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px;border:1px dashed var(--border);border-radius:var(--radius-sm);margin-bottom:12px">
+                <i data-feather="inbox" style="width:28px;height:28px;margin-bottom:8px;display:block;margin-left:auto;margin-right:auto"></i>
+                Belum ada item. Pilih produk lalu klik "+ Tambah".
               </div>
-              <div class="form-row">
-                <div class="form-group">
-                  <label class="form-label">Jumlah *</label>
-                  <input type="number" class="form-control" id="ni-qty" min="1" value="1" oninput="niHitungTotal()" />
-                </div>
-                <div class="form-group">
-                  <label class="form-label">Harga Satuan (Rp) *</label>
-                  <input type="number" class="form-control" id="ni-price" min="0" value="0" oninput="niHitungTotal()" />
-                </div>
+
+              <div id="ni-items-table-wrap" style="display:none;margin-bottom:12px">
+                <table style="width:100%;border-collapse:collapse;font-size:13px">
+                  <thead>
+                    <tr style="border-bottom:1px solid var(--border)">
+                      <th style="padding:8px 6px;text-align:left;color:var(--text-muted);font-size:11px;font-weight:600;text-transform:uppercase">#</th>
+                      <th style="padding:8px 6px;text-align:left;color:var(--text-muted);font-size:11px;font-weight:600;text-transform:uppercase">Produk / Keterangan</th>
+                      <th style="padding:8px 6px;text-align:center;color:var(--text-muted);font-size:11px;font-weight:600;text-transform:uppercase;width:70px">Qty</th>
+                      <th style="padding:8px 6px;text-align:right;color:var(--text-muted);font-size:11px;font-weight:600;text-transform:uppercase;width:120px">Harga</th>
+                      <th style="padding:8px 6px;text-align:right;color:var(--text-muted);font-size:11px;font-weight:600;text-transform:uppercase;width:110px">Subtotal</th>
+                      <th style="width:36px"></th>
+                    </tr>
+                  </thead>
+                  <tbody id="ni-items-tbody"></tbody>
+                </table>
               </div>
-              <div class="form-row">
-                <div class="form-group">
-                  <label class="form-label">Diskon (Rp)</label>
-                  <input type="number" class="form-control" id="ni-discount" min="0" value="0" oninput="niHitungTotal()" />
-                </div>
-                <div class="form-group">
-                  <label class="form-label">PPN (%)</label>
-                  <input type="number" class="form-control" id="ni-tax" min="0" max="100" value="11" oninput="niHitungTotal()" />
-                </div>
-              </div>
-              <!-- Kalkulasi -->
-              <div style="background:var(--bg-base);border-radius:var(--radius-sm);padding:14px;margin-bottom:16px">
+
+              <!-- Kalkulasi total -->
+              <div style="background:var(--bg-base);border-radius:var(--radius-sm);padding:14px">
                 <div class="flex justify-between mb-4" style="font-size:13px">
                   <span style="color:var(--text-muted)">Subtotal</span>
                   <span id="ni-c-subtotal" style="font-weight:600">Rp 0</span>
                 </div>
                 <div class="flex justify-between mb-4" style="font-size:13px">
-                  <span style="color:var(--text-muted)">Diskon</span>
-                  <span id="ni-c-discount" style="color:var(--danger)">- Rp 0</span>
+                  <span style="color:var(--text-muted)">Diskon (Rp)</span>
+                  <div style="display:flex;align-items:center;gap:8px">
+                    <input type="number" id="ni-discount" value="0" min="0"
+                      style="width:100px;background:var(--bg-input);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);padding:4px 8px;font-size:12px;text-align:right"
+                      oninput="niHitungTotal()" />
+                  </div>
                 </div>
                 <div class="flex justify-between mb-4" style="font-size:13px">
-                  <span style="color:var(--text-muted)">PPN</span>
-                  <span id="ni-c-tax">+ Rp 0</span>
+                  <span style="color:var(--text-muted)">PPN (%)</span>
+                  <div style="display:flex;align-items:center;gap:8px">
+                    <input type="number" id="ni-tax" value="11" min="0" max="100"
+                      style="width:60px;background:var(--bg-input);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);padding:4px 8px;font-size:12px;text-align:right"
+                      oninput="niHitungTotal()" />
+                  </div>
                 </div>
                 <div class="divider"></div>
                 <div class="flex justify-between">
@@ -639,6 +653,11 @@ $userInfo = getUserInfo();
                     <tr><td style="color:var(--text-muted);width:80px;padding:2px 0">Pesanan</td><td style="font-weight:600">: <span id="ni-nota-title"></span></td></tr>
                     <tr><td style="color:var(--text-muted);padding:2px 0">Jumlah</td><td>: <span id="ni-nota-qty"></span></td></tr>
                     <tr><td style="color:var(--text-muted);padding:2px 0">Harga/pcs</td><td>: <span id="ni-nota-price"></span></td></tr>
+                    <tr id="ni-nota-items-row" style="display:none">
+                      <td colspan="2" style="padding-top:6px">
+                        <div id="ni-nota-items-list"></div>
+                      </td>
+                    </tr>
                   </table>
                 </div>
                 <div style="border-top:1px dashed var(--border);padding-top:10px;margin-bottom:12px">

@@ -102,8 +102,23 @@ switch ($method) {
                 $price    = (float)($data['unit_price']  ?? 0);
                 $discount = (float)($data['discount']    ?? 0);
                 $tax      = (float)($data['tax']         ?? 11);
-                $total    = $qty * $price;
-                $grand    = ($total - $discount) * (1 + $tax / 100);
+                $items    = $data['items'] ?? [];
+
+                // Kalau ada multi-item, hitung dari items
+                if (!empty($items)) {
+                    $total = array_sum(array_map(fn($i) => (float)($i['qty'] ?? 1) * (float)($i['price'] ?? 0), $items));
+                    $qty   = array_sum(array_map(fn($i) => (float)($i['qty'] ?? 1), $items));
+                    $price = $qty > 0 ? $total / $qty : 0;
+                } else {
+                    $total = $qty * $price;
+                }
+
+                // Gunakan grand_total_override kalau ada (dikirim dari frontend)
+                if (!empty($data['grand_total_override'])) {
+                    $grand = (float)$data['grand_total_override'];
+                } else {
+                    $grand = ($total - $discount) * (1 + $tax / 100);
+                }
 
                 $pdo->prepare(
                     "INSERT INTO orders

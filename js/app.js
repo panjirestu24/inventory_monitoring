@@ -993,81 +993,168 @@ function niEsc(s) {
   return String(s).replace(/'/g, "\\'").replace(/\n/g, '');
 }
 
-// ---- Pilih produk dari dropdown → isi form ----
-function niPilihProduk(productId) {
-  if (!productId) return;
+// ---- Array items pesanan ----
+let niItems = []; // [{id, name, qty, price, note}]
+
+// ---- Tambah item dari dropdown ----
+function niTambahItem() {
   const sel = document.getElementById('ni-product-select');
-  const opt = sel.querySelector(`option[value="${productId}"]`);
+  const id  = sel.value;
+  if (!id) { showToast('Pilih produk terlebih dahulu', 'warning'); return; }
+
+  const opt = sel.querySelector(`option[value="${id}"]`);
   if (!opt) return;
 
-  // Isi judul & harga dari produk
-  const titleEl = document.getElementById('ni-title');
-  const priceEl = document.getElementById('ni-price');
-  const descEl  = document.getElementById('ni-desc');
+  // Cek kalau sudah ada, tambah qty saja
+  const exist = niItems.find(i => i.id == id);
+  if (exist) {
+    exist.qty++;
+    niRenderItems();
+    niHitungTotal();
+    showToast(`Qty ${opt.dataset.name} +1`, 'info');
+    sel.value = '';
+    return;
+  }
 
-  if (titleEl) titleEl.value = opt.dataset.name  || '';
-  if (priceEl) priceEl.value = opt.dataset.price  || 0;
-  if (descEl && !descEl.value) descEl.value = opt.dataset.desc || '';
-
+  niItems.push({
+    id:    id,
+    name:  opt.dataset.name,
+    price: parseFloat(opt.dataset.price) || 0,
+    qty:   1,
+    note:  '',
+  });
+  niRenderItems();
   niHitungTotal();
-  showToast(`Produk "${opt.dataset.name}" dipilih — harga bisa diubah`, 'info');
+  sel.value = '';
+  feather.replace();
 }
 
-// ---- Hitung total ----
-function niHitungTotal() {
-  const qty  = parseFloat(document.getElementById('ni-qty')?.value)      || 0;
-  const price= parseFloat(document.getElementById('ni-price')?.value)    || 0;
-  const disc = parseFloat(document.getElementById('ni-discount')?.value) || 0;
-  const tax  = parseFloat(document.getElementById('ni-tax')?.value)      || 0;
-  const sub  = qty * price;
-  const taxAmt = (sub - disc) * (tax / 100);
-  const total  = sub - disc + taxAmt;
-  const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
-  set('ni-c-subtotal', formatCurrency(sub));
-  set('ni-c-discount', '- ' + formatCurrency(disc));
-  set('ni-c-tax',      '+ ' + formatCurrency(taxAmt));
-  set('ni-c-total',    formatCurrency(total));
+// ---- Tambah item manual (tanpa produk) ----
+function niTambahManual() {
+  niItems.push({ id: null, name: '', price: 0, qty: 1, note: '' });
+  niRenderItems();
+  niHitungTotal();
+  // Fokus ke input nama item terakhir
+  setTimeout(() => {
+    const inputs = document.querySelectorAll('.ni-item-name');
+    const last   = inputs[inputs.length - 1];
+    if (last) last.focus();
+  }, 50);
 }
 
-// ---- Simpan order ----
+// ---- Render tabel item ----
+function niRenderItems() {
+  const tbody     = document.getElementById('ni-items-tbody');
+  const empty     = document.getElementById('ni-items-empty');
+  const tableWrap = document.getElementById('ni-items-table-wrap');
+  if (!tbody) return;
+
+  if (!niItems.length) {
+    if (empty)     empty.style.display     = 'block';
+    if (tableWrap) tableWrap.style.display = 'none';
+    return;
+  }
+  if (empty)     empty.style.display     = 'none';
+  if (tableWrap) tableWrap.style.display = 'block';
+
+  tbody.innerHTML = niItems.map((it, idx) => {
+    const sub = it.qty * it.price;
+    return `
+      <tr style="border-bottom:1px solid rgba(99,102,241,0.08)">
+        <td style="padding:8px 6px;color:var(--text-muted);font-size:12px">${idx+1}</td>
+        <td style="padding:6px">
+          <input class="ni-item-name" value="${niEsc(it.name)}"
+            placeholder="Nama produk / keterangan"
+            oninput="niItems[${idx}].name=this.value"
+            style="width:100%;background:var(--bg-input);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);padding:5px 8px;font-size:13px;font-family:inherit" />
+        </td>
+        <td style="padding:6px;text-align:center">
+          <input type="number" value="${it.qty}" min="1"
+            oninput="niItems[${idx}].qty=parseFloat(this.value)||1;niRenderSubtotals();niHitungTotal()"
+            style="width:60px;background:var(--bg-input);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);padding:5px 6px;font-size:13px;text-align:center;font-family:inherit" />
+        </td>
+        <td style="padding:6px;text-align:right">
+          <input type="number" value="${it.price}" min="0"
+            oninput="niItems[${idx}].price=parseFloat(this.value)||0;niRenderSubtotals();niHitungTotal()"
+            style="width:110px;background:var(--bg-input);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);padding:5px 8px;font-size:13px;text-align:right;font-family:inherit" />
+        </td>
+        <td style="padding:8px 6px;text-align:right;font-weight:600;font-size:13px;color:var(--success)" id="ni-sub-${idx}">
+          ${formatCurrency(sub)}
+        </td>
+        <td style="padding:6px;text-align:center">
+          <button onclick="niHapusItem(${idx})"
+            style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);color:var(--danger);border-radius:6px;padding:4px 7px;cursor:pointer;font-size:13px">
+            <i data-feather="trash-2" style="width:13px;height:13px"></i>
+          </button>
+        </td>
+      </tr>`;
+  }).join('');
+  feather.replace();
+}
+
+function niRenderSubtotals() {
+  niItems.forEach((it, idx) => {
+    const el = document.getElementById(`ni-sub-${idx}`);
+    if (el) el.textContent = formatCurrency(it.qty * it.price);
+  });
+}
+
+function niHapusItem(idx) {
+  niItems.splice(idx, 1);
+  niRenderItems();
+  niHitungTotal();
+  feather.replace();
+}
+
+// ---- Simpan order ---- (diperbarui untuk multi-item)
 async function niSimpanOrder() {
   if (!checkPermission('create')) return;
 
   const name  = document.getElementById('ni-cust-name').value.trim();
   const phone = document.getElementById('ni-cust-phone').value.trim();
-  const title = document.getElementById('ni-title').value.trim();
-  const qty   = parseFloat(document.getElementById('ni-qty').value)   || 0;
-  const price = parseFloat(document.getElementById('ni-price').value) || 0;
   const due   = document.getElementById('ni-due').value;
 
-  if (!name)   { showToast('Nama pelanggan wajib diisi', 'warning'); return; }
-  if (!phone)  { showToast('No. HP pelanggan wajib diisi', 'warning'); return; }
-  if (!title)  { showToast('Judul pesanan wajib diisi', 'warning'); return; }
-  if (qty < 1) { showToast('Jumlah minimal 1', 'warning'); return; }
-  if (price < 1){ showToast('Harga satuan wajib diisi', 'warning'); return; }
-  if (!due)    { showToast('Jatuh tempo wajib diisi', 'warning'); return; }
+  if (!name)         { showToast('Nama pelanggan wajib diisi', 'warning'); return; }
+  if (!phone)        { showToast('No. HP pelanggan wajib diisi', 'warning'); return; }
+  if (!niItems.length){ showToast('Tambahkan minimal 1 item pesanan', 'warning'); return; }
+  if (niItems.some(i => !i.name.trim())){ showToast('Nama item tidak boleh kosong', 'warning'); return; }
+  if (niItems.some(i => i.price < 1))  { showToast('Harga item tidak boleh 0', 'warning'); return; }
+  if (!due)          { showToast('Jatuh tempo wajib diisi', 'warning'); return; }
 
   const btn = document.getElementById('ni-btn-simpan');
   btn.disabled = true;
   btn.innerHTML = '<i data-feather="refresh-cw"></i> Menyimpan...';
   feather.replace();
 
+  // Hitung total dari items
+  const sub   = niItems.reduce((s, i) => s + i.qty * i.price, 0);
+  const disc  = parseFloat(document.getElementById('ni-discount').value) || 0;
+  const tax   = parseFloat(document.getElementById('ni-tax').value)      || 11;
+  const grand = (sub - disc) * (1 + tax / 100);
+
+  // Judul = gabungan nama item
+  const titleStr = niItems.length === 1
+    ? niItems[0].name
+    : niItems.map(i => i.name).join(', ');
+
   const payload = {
     customer_name:    name,
     customer_phone:   phone,
     customer_city:    document.getElementById('ni-cust-city').value,
     customer_address: document.getElementById('ni-cust-address').value,
-    title,
-    description:  document.getElementById('ni-desc').value,
-    quantity:     qty,
-    unit_price:   price,
-    discount:     parseFloat(document.getElementById('ni-discount').value) || 0,
-    tax:          parseFloat(document.getElementById('ni-tax').value)      || 11,
-    machine_id:   document.getElementById('ni-machine').value  || null,
-    operator_id:  document.getElementById('ni-operator').value || null,
-    priority:     document.getElementById('ni-priority').value,
-    due_date:     due,
-    notes:        document.getElementById('ni-notes').value,
+    title:            titleStr,
+    description:      niItems.map(i => `${i.name} x${i.qty}`).join(' | '),
+    quantity:         niItems.reduce((s, i) => s + i.qty, 0),
+    unit_price:       niItems[0].price, // harga item pertama
+    discount:         disc,
+    tax:              tax,
+    grand_total_override: grand, // kirim grand total yang sudah dihitung
+    items:            niItems,   // array semua item
+    machine_id:       document.getElementById('ni-machine').value  || null,
+    operator_id:      document.getElementById('ni-operator').value || null,
+    priority:         document.getElementById('ni-priority').value,
+    due_date:         due,
+    notes:            document.getElementById('ni-notes').value,
   };
 
   const res = await apiPost('api/orders.php?action=create_with_customer', payload);
@@ -1084,13 +1171,24 @@ async function niSimpanOrder() {
   }
 }
 
+// ---- Hitung total ----
+function niHitungTotal() {
+  // Hitung subtotal dari semua item
+  const sub = niItems.reduce((s, it) => s + (it.qty * it.price), 0);
+  const disc  = parseFloat(document.getElementById('ni-discount')?.value) || 0;
+  const tax   = parseFloat(document.getElementById('ni-tax')?.value)      || 0;
+  const taxAmt= (sub - disc) * (tax / 100);
+  const total = sub - disc + taxAmt;
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  set('ni-c-subtotal', formatCurrency(sub));
+  set('ni-c-total',    formatCurrency(total));
+}
+
 // ---- Tampilkan Nota ----
 function niTampilkanNota(o, orderNum) {
-  const qty   = parseFloat(o.quantity)   || 0;
-  const price = parseFloat(o.unit_price) || 0;
-  const disc  = parseFloat(o.discount)   || 0;
-  const tax   = parseFloat(o.tax)        || 0;
-  const sub   = qty * price;
+  const disc  = parseFloat(o.discount) || 0;
+  const tax   = parseFloat(o.tax)      || 0;
+  const sub   = niItems.reduce((s, i) => s + i.qty * i.price, 0);
   const taxAmt= (sub - disc) * (tax / 100);
   const total = sub - disc + taxAmt;
 
@@ -1101,21 +1199,41 @@ function niTampilkanNota(o, orderNum) {
   set('ni-nota-cust-name', o.customer_name);
   set('ni-nota-cust-phone',o.customer_phone || '—');
   set('ni-nota-cust-city', o.customer_city  || '—');
-  set('ni-nota-title',     o.title);
-  set('ni-nota-qty',       qty + ' pcs');
-  set('ni-nota-price',     formatCurrency(price));
-  set('ni-nota-subtotal',  formatCurrency(sub));
-  set('ni-nota-disc',      '- ' + formatCurrency(disc));
-  set('ni-nota-tax',       '+ ' + formatCurrency(taxAmt));
-  set('ni-nota-total',     formatCurrency(total));
-  set('ni-nota-due',       formatDate(o.due_date));
-  set('ni-nota-priority',  {'low':'Rendah','normal':'Normal','high':'Tinggi','urgent':'URGENT'}[o.priority] || o.priority);
+  set('ni-nota-title',     niItems.map(i => `${i.name} (×${i.qty})`).join(', '));
+
+  // Items detail di nota
+  const qtyEl   = document.getElementById('ni-nota-qty');
+  const priceEl = document.getElementById('ni-nota-price');
+  if (niItems.length === 1) {
+    if (qtyEl)   qtyEl.textContent   = niItems[0].qty + ' pcs';
+    if (priceEl) priceEl.textContent = formatCurrency(niItems[0].price);
+  } else {
+    // Multi item — render list
+    if (qtyEl)   qtyEl.closest && qtyEl.closest('tr') && (qtyEl.closest('tr').style.display = 'none');
+    if (priceEl) priceEl.closest && priceEl.closest('tr') && (priceEl.closest('tr').style.display = 'none');
+    const listEl = document.getElementById('ni-nota-items-list');
+    const rowEl  = document.getElementById('ni-nota-items-row');
+    if (listEl) {
+      listEl.innerHTML = niItems.map(i =>
+        `<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:2px">
+          <span>${i.name} ×${i.qty}</span>
+          <span>${formatCurrency(i.qty * i.price)}</span>
+        </div>`
+      ).join('');
+    }
+    if (rowEl) rowEl.style.display = '';
+  }
+
+  set('ni-nota-subtotal', formatCurrency(sub));
+  set('ni-nota-disc',     '- ' + formatCurrency(disc));
+  set('ni-nota-tax',      '+ ' + formatCurrency(taxAmt));
+  set('ni-nota-total',    formatCurrency(total));
+  set('ni-nota-due',      formatDate(o.due_date));
+  set('ni-nota-priority', {'low':'Rendah','normal':'Normal','high':'Tinggi','urgent':'URGENT'}[o.priority] || o.priority);
 
   document.getElementById('ni-nota-placeholder').style.display = 'none';
   document.getElementById('ni-nota-content').style.display     = 'block';
   feather.replace();
-
-  // Scroll ke nota di layar kecil
   if (window.innerWidth < 900) {
     document.getElementById('ni-nota-content').scrollIntoView({behavior:'smooth'});
   }
@@ -1123,13 +1241,11 @@ function niTampilkanNota(o, orderNum) {
 
 function niResetForm() {
   ['ni-cust-name','ni-cust-phone','ni-cust-city','ni-cust-address',
-   'ni-cust-search','ni-title','ni-desc','ni-notes'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.value = '';
+   'ni-cust-search','ni-notes'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
   });
-  ['ni-qty','ni-price','ni-discount','ni-tax'].forEach((id, i) => {
-    const el = document.getElementById(id);
-    if (el) el.value = [1,0,0,11][i];
+  ['ni-discount','ni-tax'].forEach((id, i) => {
+    const el = document.getElementById(id); if (el) el.value = [0, 11][i];
   });
   const machSel = document.getElementById('ni-machine');
   if (machSel) machSel.value = '';
@@ -1139,6 +1255,11 @@ function niResetForm() {
   if (prioSel) prioSel.value = 'normal';
   const prodSel = document.getElementById('ni-product-select');
   if (prodSel) prodSel.value = '';
+
+  // Reset items
+  niItems = [];
+  niRenderItems();
+  niHitungTotal();
 
   // Reset due date
   const due = document.getElementById('ni-due');
@@ -1150,7 +1271,6 @@ function niResetForm() {
   if (ph) ph.style.display = 'block';
   if (ct) ct.style.display = 'none';
 
-  niHitungTotal();
   window.scrollTo({top:0, behavior:'smooth'});
 }
 
