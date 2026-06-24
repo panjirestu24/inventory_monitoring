@@ -3,6 +3,14 @@ header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE');
 header('Access-Control-Allow-Headers: Content-Type');
+
+session_start();
+if (!isset($_SESSION['user_id'])) {
+    http_response_code(401);
+    echo json_encode(['success' => false, 'message' => 'Unauthorized']);
+    exit;
+}
+
 require_once '../config/database.php';
 
 $pdo = db();
@@ -65,7 +73,7 @@ switch ($method) {
             // Log initial stock
             if (($data['stock'] ?? 0) > 0) {
                 $pdo->prepare("INSERT INTO stock_transactions (item_id, type, reference_type, quantity, stock_before, stock_after, notes, created_by) VALUES (?,?,?,?,?,?,?,?)")
-                    ->execute([$newId, 'in', 'initial', $data['stock'], 0, $data['stock'], 'Stok awal', 1]);
+                    ->execute([$newId, 'in', 'initial', $data['stock'], 0, $data['stock'], 'Stok awal', $_SESSION['user_id']]);
             }
             echo json_encode(['success' => true, 'berhasil' => true, 'pesan' => 'Item berhasil ditambahkan', 'message' => 'Item berhasil ditambahkan', 'id' => $newId]);
         } elseif ($action === 'stock_in') {
@@ -78,7 +86,7 @@ switch ($method) {
             $after = $before + $qty;
             $pdo->prepare("UPDATE items SET stock=? WHERE id=?")->execute([$after, $itemId]);
             $pdo->prepare("INSERT INTO stock_transactions (item_id, type, reference_type, quantity, stock_before, stock_after, unit_price, notes, created_by) VALUES (?,?,?,?,?,?,?,?,?)")
-                ->execute([$itemId, 'in', 'purchase', $qty, $before, $after, $data['unit_price'] ?? 0, $data['notes'] ?? '', 1]);
+                ->execute([$itemId, 'in', 'purchase', $qty, $before, $after, $data['unit_price'] ?? 0, $data['notes'] ?? '', $_SESSION['user_id']]);
             echo json_encode(['success' => true, 'berhasil' => true, 'pesan' => 'Stok masuk berhasil dicatat', 'message' => 'Stok masuk berhasil dicatat']);
         } elseif ($action === 'stock_out') {
             $itemId = (int)$data['item_id'];
@@ -94,7 +102,7 @@ switch ($method) {
             $after = $before - $qty;
             $pdo->prepare("UPDATE items SET stock=? WHERE id=?")->execute([$after, $itemId]);
             $pdo->prepare("INSERT INTO stock_transactions (item_id, type, reference_type, quantity, stock_before, stock_after, notes, created_by) VALUES (?,?,?,?,?,?,?,?)")
-                ->execute([$itemId, 'out', 'order', $qty, $before, $after, $data['notes'] ?? '', 1]);
+                ->execute([$itemId, 'out', 'order', $qty, $before, $after, $data['notes'] ?? '', $_SESSION['user_id']]);
             echo json_encode(['success' => true, 'berhasil' => true, 'pesan' => 'Stok keluar berhasil dicatat', 'message' => 'Stok keluar berhasil dicatat']);
         }
         break;

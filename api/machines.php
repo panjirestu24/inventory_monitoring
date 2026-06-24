@@ -3,6 +3,14 @@ header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, PUT');
 header('Access-Control-Allow-Headers: Content-Type');
+
+session_start();
+if (!isset($_SESSION['user_id'])) {
+    http_response_code(401);
+    echo json_encode(['success' => false, 'message' => 'Unauthorized']);
+    exit;
+}
+
 require_once '../config/database.php';
 
 $pdo = db();
@@ -30,7 +38,7 @@ switch ($method) {
         $eventMap = ['active'=>'start','idle'=>'stop','maintenance'=>'maintenance_start','offline'=>'stop'];
         $event = $eventMap[$data['status']] ?? 'stop';
         $pdo->prepare("INSERT INTO machine_logs (machine_id, order_id, event, description, operator_id) VALUES (?,?,?,?,?)")
-            ->execute([$id, $data['order_id'] ?? null, $event, $data['description'] ?? '', 1]);
+            ->execute([$id, $data['order_id'] ?? null, $event, $data['description'] ?? '', $_SESSION['user_id']]);
         echo json_encode(['success' => true, 'message' => 'Status mesin diupdate']);
         break;
 }

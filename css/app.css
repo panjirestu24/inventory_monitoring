@@ -358,6 +358,12 @@ tbody td:first-child { color: var(--text-primary); font-weight: 500; }
 .badge-rendah { background: rgba(245,158,11,0.2); color: #fbbf24; border: 1px solid rgba(245,158,11,0.3); }
 .badge-aman   { background: rgba(16,185,129,0.2); color: #34d399; border: 1px solid rgba(16,185,129,0.3); }
 
+/* ---- Delivery Status Badges ---- */
+.badge-delivery-prepared  { background: rgba(139,92,246,0.15); color: #c4b5fd; border: 1px solid rgba(139,92,246,0.3); }
+.badge-delivery-shipping  { background: rgba(6,182,212,0.15);  color: #22d3ee; border: 1px solid rgba(6,182,212,0.3);  }
+.badge-delivery-arrived   { background: rgba(16,185,129,0.15); color: #34d399; border: 1px solid rgba(16,185,129,0.3); }
+.badge-delivery-received  { background: rgba(16,185,129,0.3);  color: #6ee7b7; border: 1px solid rgba(16,185,129,0.5); font-weight: 700; }
+
 @keyframes glow {
   0%,100% { box-shadow: 0 0 4px rgba(239,68,68,0.4); }
   50% { box-shadow: 0 0 12px rgba(239,68,68,0.7); }
@@ -662,3 +668,241 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 .tab-pill { padding: 6px 16px; border-radius: 6px; font-size: 12px; font-weight: 500; cursor: pointer; color: var(--text-muted); transition: var(--transition); }
 .tab-pill.active { background: linear-gradient(135deg, var(--primary), var(--secondary)); color: white; box-shadow: 0 2px 8px rgba(99,102,241,0.3); }
 .tab-pill:hover:not(.active) { color: var(--text-primary); background: var(--bg-card-hover); }
+
+/* ============================================================
+   ORDER CARD + STATUS STEPPER
+   ============================================================ */
+.order-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin-bottom: 14px;
+  transition: var(--transition);
+}
+.order-card:hover { border-color: var(--border-hover); box-shadow: var(--shadow), var(--shadow-glow); }
+
+.order-card-header {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  margin-bottom: 16px; gap: 12px; flex-wrap: wrap;
+}
+.order-card-left { flex: 1; min-width: 0; }
+.order-card-num  { font-family: monospace; font-size: 13px; color: var(--accent); font-weight: 700; margin-bottom: 3px; }
+.order-card-title{ font-size: 15px; font-weight: 700; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.order-card-meta { font-size: 12px; color: var(--text-muted); margin-top: 4px; display: flex; gap: 14px; flex-wrap: wrap; }
+.order-card-meta span { display: flex; align-items: center; gap: 4px; }
+.order-card-meta svg { width: 12px; height: 12px; }
+
+.order-card-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+/* ---- Stepper ---- */
+.status-stepper {
+  display: flex; align-items: center;
+  gap: 0; margin-top: 4px;
+  overflow-x: auto; padding-bottom: 4px;
+}
+.step {
+  display: flex; align-items: center;
+  flex-shrink: 0;
+}
+.step-dot {
+  width: 32px; height: 32px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 700;
+  border: 2px solid var(--border);
+  background: var(--bg-base);
+  color: var(--text-muted);
+  cursor: default;
+  transition: var(--transition);
+  position: relative;
+  flex-shrink: 0;
+}
+.step-dot svg { width: 14px; height: 14px; }
+
+.step-dot.done {
+  background: rgba(16,185,129,0.15);
+  border-color: var(--success);
+  color: var(--success);
+}
+.step-dot.active {
+  background: linear-gradient(135deg, var(--primary), var(--secondary));
+  border-color: var(--primary);
+  color: white;
+  box-shadow: 0 0 12px rgba(99,102,241,0.5);
+  animation: stepPulse 2s infinite;
+}
+.step-dot.next-btn {
+  background: rgba(99,102,241,0.1);
+  border-color: rgba(99,102,241,0.4);
+  border-style: dashed;
+  color: var(--primary-light);
+  cursor: pointer;
+}
+.step-dot.next-btn:hover {
+  background: rgba(99,102,241,0.25);
+  border-color: var(--primary);
+  transform: scale(1.1);
+  box-shadow: 0 0 14px rgba(99,102,241,0.4);
+}
+.step-dot.cancelled {
+  background: rgba(239,68,68,0.1);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+@keyframes stepPulse {
+  0%,100% { box-shadow: 0 0 0 0 rgba(99,102,241,0.4); }
+  50%      { box-shadow: 0 0 0 6px rgba(99,102,241,0); }
+}
+
+.step-label {
+  font-size: 10px; color: var(--text-muted); text-align: center;
+  margin-top: 5px; font-weight: 500; white-space: nowrap;
+  line-height: 1.2;
+}
+.step-label.active-label { color: var(--primary-light); font-weight: 600; }
+.step-label.done-label   { color: var(--success); }
+
+.step-connector {
+  height: 2px;
+  width: 28px; flex-shrink: 0;
+  background: var(--border);
+  transition: var(--transition);
+}
+.step-connector.done { background: var(--success); }
+
+.step-wrapper { display: flex; flex-direction: column; align-items: center; }
+
+/* Tooltip on hover */
+.step-dot[title]:hover::after {
+  content: attr(title);
+  position: absolute; bottom: calc(100% + 8px); left: 50%;
+  transform: translateX(-50%);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  font-size: 11px; font-weight: 500;
+  padding: 4px 10px; border-radius: 6px;
+  white-space: nowrap; z-index: 100;
+  box-shadow: var(--shadow);
+}
+
+/* ---- Proof upload inline ---- */
+.proof-upload-zone {
+  margin-top: 10px;
+  background: rgba(99,102,241,0.05);
+  border: 1px dashed rgba(99,102,241,0.35);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  display: flex; align-items: center; gap: 12px;
+  flex-wrap: wrap;
+}
+.proof-upload-zone label {
+  display: flex; align-items: center; gap: 7px;
+  background: var(--bg-card-hover);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  padding: 7px 14px; font-size: 12px; font-weight: 500;
+  cursor: pointer; transition: var(--transition);
+}
+.proof-upload-zone label:hover { border-color: var(--primary); color: var(--primary-light); }
+.proof-upload-zone label svg { width: 14px; height: 14px; }
+.proof-upload-zone input[type=file] { display: none; }
+.proof-preview {
+  width: 52px; height: 52px; border-radius: 6px;
+  object-fit: cover; border: 1px solid var(--border);
+  display: none;
+}
+.proof-upload-note { font-size: 11px; color: var(--text-muted); flex: 1; }
+.btn-confirm-received {
+  background: linear-gradient(135deg, var(--success), #059669);
+  color: white; border: none;
+  padding: 8px 18px; border-radius: var(--radius-sm);
+  font-size: 13px; font-weight: 600; cursor: pointer;
+  display: flex; align-items: center; gap: 6px;
+  transition: var(--transition);
+  box-shadow: 0 4px 12px rgba(16,185,129,0.3);
+}
+.btn-confirm-received:hover { box-shadow: 0 6px 20px rgba(16,185,129,0.5); transform: translateY(-1px); }
+.btn-confirm-received:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.btn-confirm-received svg { width: 14px; height: 14px; }
+
+/* ---- Proof image display ---- */
+.proof-img-thumb {
+  width: 56px; height: 56px; border-radius: 8px;
+  object-fit: cover; border: 2px solid var(--success);
+  cursor: pointer; transition: var(--transition);
+}
+.proof-img-thumb:hover { transform: scale(1.05); box-shadow: 0 4px 14px rgba(16,185,129,0.3); }
+
+/* ---- Lightbox ---- */
+#lightbox {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,0.85); z-index: 9999;
+  align-items: center; justify-content: center;
+  cursor: zoom-out;
+}
+#lightbox.open { display: flex; }
+#lightbox img { max-width: 90vw; max-height: 88vh; border-radius: 8px; box-shadow: 0 20px 60px rgba(0,0,0,0.8); }
+
+/* ============================================================
+   ORDER BARU — Print & Nota Styles
+   ============================================================ */
+@media print {
+  .no-print  { display: none !important; }
+  .print-only { display: block !important; }
+
+  body {
+    background: #fff !important;
+    color: #000 !important;
+    font-size: 12px !important;
+  }
+
+  /* Reset card styling untuk print */
+  .nota-wrap.card {
+    background: #fff !important;
+    border: 1px solid #ccc !important;
+    box-shadow: none !important;
+    color: #000 !important;
+    padding: 20px !important;
+  }
+
+  /* Teks warna override */
+  .nota-wrap * {
+    color: #000 !important;
+    border-color: #ccc !important;
+    background: transparent !important;
+  }
+
+  .nota-wrap [style*="color:var(--accent)"],
+  .nota-wrap [style*="color:var(--primary)"],
+  .nota-wrap [style*="color:var(--success)"] {
+    color: #000 !important;
+    font-weight: bold !important;
+  }
+
+  /* Sembunyikan elemen lain */
+  .top-nav, .page-wrap > div:first-child,
+  .form-nota-grid > div:first-child,
+  #nota-placeholder, #toast-container {
+    display: none !important;
+  }
+
+  /* Nota full width saat print */
+  .form-nota-grid {
+    display: block !important;
+  }
+  #nota-wrapper {
+    width: 100% !important;
+    max-width: 80mm !important;
+    margin: 0 auto !important;
+  }
+}
+
+/* ============================================================
+   CUSTOMER HISTORY PANEL
+   ============================================================ */
+#customer-history-panel {
+  animation: fadeIn 0.3s ease;
+}

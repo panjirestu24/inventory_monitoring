@@ -3,6 +3,14 @@ header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE');
 header('Access-Control-Allow-Headers: Content-Type');
+
+session_start();
+if (!isset($_SESSION['user_id'])) {
+    http_response_code(401);
+    echo json_encode(['success' => false, 'message' => 'Unauthorized']);
+    exit;
+}
+
 require_once '../config/database.php';
 
 $pdo = db();
@@ -49,6 +57,109 @@ switch ($method) {
         break;
 
     case 'POST':
+        // ── Buat order + customer sekaligus (dari halaman kasir) ──
+        if ($action === 'create_with_customer') {
+            $data = json_decode(file_get_contents('php://input'), true);
+
+            $pdo->beginTransaction();
+            try {
+                // Cari pelanggan berdasarkan HP, jika belum ada buat baru
+                $phone = preg_replace('/[^0-9]/', '', $data['customer_phone'] ?? '');
+                $stmt  = $pdo->prepare("SELECT id FROM customers WHERE phone = ? AND is_active = 1 LIMIT 1");
+                $stmt->execute([$phone]);
+                $existing = $stmt->fetch();
+
+                if ($existing) {
+                    $customerId = $existing['id'];
+                    // Update nama jika berbeda
+                    $pdo->prepare("UPDATE customers SET name=?, city=?, updated_at=NOW() WHERE id=?")
+                        ->execute([$data['customer_name'], $data['customer_city'] ?? '', $customerId]);
+                } else {
+                    // Auto-generate kode pelanggan
+                    $countStmt = $pdo->query("SELECT COUNT(*)+1 FROM customers");
+                    $custCode  = 'CUS' . str_pad($countStmt->fetchColumn(), 4, '0', STR_PAD_LEFT);
+                    $pdo->prepare(
+                        "INSERT INTO customers (code, name, phone, city, address, notes, is_active)
+                         VALUES (?,?,?,?,?,?,1)"
+                    )->execute([
+                        $custCode,
+                        $data['customer_name'],
+                        $phone,
+                        $data['customer_city'] ?? '',
+                        $data['customer_address'] ?? '',
+                        $data['customer_notes'] ?? '',
+                    ]);
+                    $customerId = $pdo->lastInsertId();
+                }
+
+                // Generate nomor order
+                $prefix   = 'ORD';
+                $seqStmt  = $pdo->query("SELECT COUNT(*)+1 FROM orders WHERE YEAR(created_at)=YEAR(NOW()) AND MONTH(created_at)=MONTH(NOW())");
+                $seq      = str_pad($seqStmt->fetchColumn(), 4, '0', STR_PAD_LEFT);
+                $orderNum = $prefix . '-' . date('ym') . '-' . $seq;
+
+                $qty      = (float)($data['quantity']   ?? 1);
+                $price    = (float)($data['unit_price']  ?? 0);
+                $discount = (float)($data['discount']    ?? 0);
+                $tax      = (float)($data['tax']         ?? 11);
+                $total    = $qty * $price;
+                $grand    = ($total - $discount) * (1 + $tax / 100);
+
+                $pdo->prepare(
+                    "INSERT INTO orders
+                     (order_number, customer_id, machine_id, operator_id, title, description,
+                      status, priority, quantity, unit_price, total_price, discount, tax,
+                      grand_total, start_date, due_date, notes, created_by)
+                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+                )->execute([
+                    $orderNum, $customerId,
+                    isset($data['machine_id'])  && $data['machine_id']  ? $data['machine_id']  : null,
+                    isset($data['operator_id']) && $data['operator_id'] ? $data['operator_id'] : null,
+                    $data['title'],
+                    $data['description'] ?? '',
+                    'pending',
+                    $data['priority'] ?? 'normal',
+                    $qty, $price, $total, $discount, $tax, $grand,
+                    $data['start_date'] ?? null,
+                    $data['due_date']   ?? null,
+                    $data['notes']      ?? '',
+                    $_SESSION['user_id'],
+                ]);
+                $orderId = $pdo->lastInsertId();
+
+                $pdo->commit();
+
+                // Ambil data lengkap untuk nota
+                $stmt = $pdo->prepare(
+                    "SELECT o.*, c.name as customer_name, c.phone as customer_phone,
+                            c.city as customer_city, c.address as customer_address,
+                            m.name as machine_name, u.name as operator_name
+                     FROM orders o
+                     JOIN customers c ON o.customer_id = c.id
+                     LEFT JOIN machines m ON o.machine_id = m.id
+                     LEFT JOIN users u ON o.operator_id = u.id
+                     WHERE o.id = ?"
+                );
+                $stmt->execute([$orderId]);
+                $orderData = $stmt->fetch();
+
+                echo json_encode([
+                    'success'      => true,
+                    'message'      => 'Order berhasil dibuat',
+                    'order_number' => $orderNum,
+                    'order_id'     => $orderId,
+                    'customer_id'  => $customerId,
+                    'data'         => $orderData,
+                ]);
+
+            } catch (Exception $e) {
+                $pdo->rollBack();
+                echo json_encode(['success' => false, 'message' => 'Gagal: ' . $e->getMessage()]);
+            }
+            exit;
+        }
+
+        // ── POST order biasa ──
         $data = json_decode(file_get_contents('php://input'), true);
         // Generate order number
         $prefix = 'ORD';
@@ -74,6 +185,25 @@ switch ($method) {
     case 'PUT':
         $data = json_decode(file_get_contents('php://input'), true);
         $id = (int)$data['id'];
+
+        // Update status saja (realtime stepper)
+        if (isset($data['status_only']) && $data['status_only']) {
+            $newStatus = $data['status'];
+            $stmt = $pdo->prepare(
+                "UPDATE orders SET status=?,
+                 completed_date = CASE WHEN ? = 'completed' THEN NOW() ELSE completed_date END
+                 WHERE id=?"
+            );
+            $stmt->execute([$newStatus, $newStatus, $id]);
+            // Update machine jika ada
+            if (!empty($data['machine_id'])) {
+                $machStatus = $newStatus === 'in_progress' ? 'active' : 'idle';
+                $pdo->prepare("UPDATE machines SET status=? WHERE id=?")->execute([$machStatus, $data['machine_id']]);
+            }
+            echo json_encode(['success' => true, 'message' => 'Status diupdate ke ' . $newStatus]);
+            break;
+        }
+
         $stmt = $pdo->prepare("UPDATE orders SET status=?, machine_id=?, operator_id=?, notes=?, completed_date = CASE WHEN ? = 'completed' THEN NOW() ELSE completed_date END WHERE id=?");
         $stmt->execute([$data['status'], $data['machine_id'] ?: null, $data['operator_id'] ?: null, $data['notes'] ?? '', $data['status'], $id]);
         // Update machine status

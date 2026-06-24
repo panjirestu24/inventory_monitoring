@@ -2,6 +2,19 @@
 // PrintTrack — Main Application JS
 // ============================================================
 
+// Global error handler — tangkap semua JS error
+window.onerror = (msg, src, line, col, err) => {
+  console.error(`JS Error: ${msg} | ${src}:${line}:${col}`, err);
+  // Tampilkan error di halaman agar mudah debug
+  const div = document.createElement('div');
+  div.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#ef4444;color:white;padding:12px;z-index:99999;font-family:monospace;font-size:13px';
+  div.textContent = `JS Error: ${msg} @ line ${line}`;
+  document.body?.prepend(div);
+};
+window.onunhandledrejection = (e) => {
+  console.error('Unhandled Promise:', e.reason);
+};
+
 const API = 'api/';
 let chartOrders = null;
 let chartStock  = null;
@@ -12,13 +25,9 @@ let currentReportType = 'stock';
 // ---- Ref Data ----
 let refCategories = [];
 let refUnits      = [];
-let refSuppliers  = [];
-let refCustomers  = [];
-let refMachines   = [];
-let refOperators  = [];
 let allItems      = [];
 let allOrders     = [];
-let allSuppliers  = [];
+let allDeliveries = [];
 
 // ============================================================
 // INIT
@@ -29,9 +38,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   
   // Apply role-based UI restrictions
   applyRoleBasedUI();
-  
-  await loadRefData();
-  populateFormSelects();
+
+  try {
+    await loadRefData();
+    populateFormSelects();
+  } catch(e) {
+    console.error('Init error:', e);
+  }
+
   navigate('dashboard');
 
   // Sidebar nav
@@ -42,8 +56,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Report date defaults
   const today = new Date().toISOString().slice(0,10);
   const monthStart = today.slice(0,8) + '01';
-  document.getElementById('report-from').value = monthStart;
-  document.getElementById('report-to').value   = today;
+  const rf = document.getElementById('report-from');
+  const rt = document.getElementById('report-to');
+  if (rf) rf.value = monthStart;
+  if (rt) rt.value = today;
 });
 
 // ============================================================
@@ -160,16 +176,15 @@ function startClock() {
 // NAVIGATION
 // ============================================================
 const pageTitles = {
-  dashboard: ['Dashboard', 'Overview semua aktivitas'],
-  monitoring: ['Monitoring Realtime', 'Status mesin & order live'],
-  items:      ['Bahan Baku', 'Kelola inventory material'],
+  dashboard:        ['Dashboard', 'Overview semua aktivitas'],
+  monitoring:       ['Monitoring Realtime', 'Status mesin & order live'],
+  items:            ['Bahan Baku', 'Kelola inventory material'],
   'stock-mutation': ['Mutasi Stok', 'Stok masuk & keluar'],
-  orders:     ['Order Cetak', 'Manajemen pesanan'],
-  machines:   ['Mesin', 'Status & log mesin'],
-  suppliers:  ['Supplier', 'Data pemasok bahan'],
-  customers:  ['Pelanggan', 'Data pelanggan'],
-  purchases:  ['Pembelian', 'Purchase Order'],
-  reports:    ['Laporan', 'Analisis & ekspor data'],
+  orders:           ['Order Cetak', 'Manajemen pesanan pelanggan'],
+  deliveries:       ['Pengiriman', 'Monitoring pengiriman ke pelanggan'],
+  machines:         ['Mesin', 'Status & log mesin'],
+  customers:        ['Pelanggan', 'Riwayat pelanggan & order'],
+  reports:          ['Laporan', 'Analisis & ekspor data'],
 };
 
 function navigate(page) {
@@ -199,8 +214,8 @@ function navigate(page) {
     case 'items':          loadItems(); break;
     case 'stock-mutation': loadStockMutationPage(); break;
     case 'orders':         loadOrders(); break;
+    case 'deliveries':     loadDeliveries(); break;
     case 'machines':       loadMachinesPage(); break;
-    case 'suppliers':      loadSuppliers(); break;
     case 'customers':      loadCustomers(); break;
   }
 
@@ -208,7 +223,12 @@ function navigate(page) {
 }
 
 function openQuickAdd() {
-  const map = { items: openAddItemModal, orders: openAddOrderModal, suppliers: openAddSupplierModal };
+  const map = {
+    items:      openAddItemModal,
+    orders:     () => window.location.href = 'order_baru.php',
+    deliveries: () => showToast('Pilih order yang sudah selesai untuk membuat pengiriman', 'info'),
+    customers:  () => window.location.href = 'order_baru.php',
+  };
   if (map[currentPage]) map[currentPage]();
   else showToast('Pilih halaman yang sesuai untuk menambah data', 'info');
 }
@@ -217,64 +237,27 @@ function openQuickAdd() {
 // REF DATA LOADER
 // ============================================================
 async function loadRefData() {
-  const [cats, units, sups, custs, machs, ops] = await Promise.all([
+  const [cats, units] = await Promise.all([
     apiFetch('api/categories.php'),
     apiFetch('api/units.php'),
-    apiFetch('api/suppliers.php'),
-    apiFetch('api/customers.php'),
-    apiFetch('api/machines.php'),
-    apiFetch('api/dashboard.php?action=operators'),
   ]);
   refCategories = cats?.data || [];
   refUnits      = units?.data || [];
-  refSuppliers  = sups?.data || [];
-  refCustomers  = custs?.data || [];
-  refMachines   = machs?.data || [];
-  refOperators  = ops?.data || [];
 }
 
 function populateFormSelects() {
+  const setSelect    = (id, html)  => { const el = document.getElementById(id); if (el) el.innerHTML = html; };
+  const appendSelect = (id, html)  => { const el = document.getElementById(id); if (el) el.innerHTML += html; };
+
+  // Item form — category & unit selects
+  setSelect('item-category', '<option value="">-- Pilih Kategori --</option>');
+  refCategories.forEach(c => appendSelect('item-category', `<option value="${c.id}">${c.name}</option>`));
+
+  setSelect('item-unit', '<option value="">-- Pilih Satuan --</option>');
+  refUnits.forEach(u => appendSelect('item-unit', `<option value="${u.id}">${u.name} (${u.symbol})</option>`));
+
   // Category filter on items page
-  const catFilter = document.getElementById('items-cat-filter');
-  refCategories.forEach(c => {
-    catFilter.innerHTML += `<option value="${c.id}">${c.name}</option>`;
-  });
-
-  // Add item modal
-  const itemCat = document.getElementById('item-category');
-  itemCat.innerHTML = '<option value="">-- Pilih Kategori --</option>';
-  refCategories.forEach(c => itemCat.innerHTML += `<option value="${c.id}">${c.name}</option>`);
-
-  const itemUnit = document.getElementById('item-unit');
-  itemUnit.innerHTML = '<option value="">-- Pilih Satuan --</option>';
-  refUnits.forEach(u => itemUnit.innerHTML += `<option value="${u.id}">${u.name} (${u.symbol})</option>`);
-
-  const itemSup = document.getElementById('item-supplier');
-  refSuppliers.forEach(s => itemSup.innerHTML += `<option value="${s.id}">${s.name}</option>`);
-
-  // Add order modal
-  const orderCust = document.getElementById('order-customer');
-  orderCust.innerHTML = '<option value="">-- Pilih Pelanggan --</option>';
-  refCustomers.forEach(c => orderCust.innerHTML += `<option value="${c.id}">${c.name}</option>`);
-
-  const orderMach = document.getElementById('order-machine');
-  orderMach.innerHTML = '<option value="">-- Pilih Mesin --</option>';
-  refMachines.forEach(m => orderMach.innerHTML += `<option value="${m.id}">${m.name}</option>`);
-
-  const orderOp = document.getElementById('order-operator');
-  orderOp.innerHTML = '<option value="">-- Pilih Operator --</option>';
-  refOperators.forEach(o => orderOp.innerHTML += `<option value="${o.id}">${o.name}</option>`);
-
-  const statusMach = document.getElementById('status-machine');
-  statusMach.innerHTML = '<option value="">-- Tanpa Mesin --</option>';
-  refMachines.forEach(m => statusMach.innerHTML += `<option value="${m.id}">${m.name}</option>`);
-
-  // Stock mutation selects
-  const inItem = document.getElementById('in-item-id');
-  const outItem = document.getElementById('out-item-id');
-  const mutFilter = document.getElementById('mutation-item-filter');
-
-  // Will be populated after items load
+  refCategories.forEach(c => appendSelect('items-cat-filter', `<option value="${c.id}">${c.name}</option>`));
 }
 
 function populateItemSelects(items) {
@@ -621,7 +604,6 @@ async function openEditItemModal(id) {
   document.getElementById('item-name').value = item.name;
   document.getElementById('item-category').value = item.category_id;
   document.getElementById('item-unit').value = item.unit_id;
-  document.getElementById('item-supplier').value = item.supplier_id || '';
   document.getElementById('item-location').value = item.location || '';
   document.getElementById('item-stock').value = parseFloat(item.stock);
   document.getElementById('item-stock').disabled = true; // Stok tidak bisa diubah manual
@@ -649,7 +631,7 @@ async function submitAddItem(e) {
     name: document.getElementById('item-name').value,
     category_id: document.getElementById('item-category').value,
     unit_id: document.getElementById('item-unit').value,
-    supplier_id: document.getElementById('item-supplier').value,
+    supplier_id: null,
     location: document.getElementById('item-location').value,
     stock: document.getElementById('item-stock').value,
     min_stock: document.getElementById('item-min-stock').value,
@@ -755,112 +737,387 @@ async function loadMutations() {
 }
 
 // ============================================================
-// ORDERS
+// ORDERS  — realtime stepper card
 // ============================================================
+let ordersInterval = null;
+const ORDER_STEPS = [
+  { key: 'pending',       label: 'Pending',    icon: 'clock'       },
+  { key: 'confirmed',     label: 'Konfirmasi', icon: 'check-square'},
+  { key: 'in_progress',   label: 'Proses',     icon: 'settings'    },
+  { key: 'quality_check', label: 'QC',         icon: 'shield'      },
+  { key: 'completed',     label: 'Selesai',    icon: 'check-circle'},
+];
+const ORDER_STEP_KEYS = ORDER_STEPS.map(s => s.key);
+
 async function loadOrders() {
-  const search = document.getElementById('orders-search').value;
-  const status = document.getElementById('orders-status-filter').value;
+  const searchEl = document.getElementById('orders-search');
+  const statusEl = document.getElementById('orders-status-filter');
+  const search = searchEl ? searchEl.value : '';
+  const status = statusEl ? statusEl.value : '';
   const params = new URLSearchParams({ action: 'list', search, status });
   const data   = await apiFetch(`${API}orders.php?${params}`);
   allOrders    = data?.data || [];
-  renderOrdersTable(allOrders);
+  renderOrdersList(allOrders);
   feather.replace();
 }
 
 function filterOrders() { loadOrders(); }
 
-function renderOrdersTable(orders) {
-  const tbody = document.getElementById('orders-tbody');
+function renderOrdersList(orders) {
+  const el = document.getElementById('orders-list');
+  if (!el) return;
   if (!orders.length) {
-    tbody.innerHTML = `<tr><td colspan="9"><div class="empty-state"><h3>Tidak ada order ditemukan</h3></div></td></tr>`;
-    return;
+    el.innerHTML = `<div class="card"><div class="empty-state"><i data-feather="file-text"></i><h3>Tidak ada order ditemukan</h3></div></div>`;
+    feather.replace(); return;
   }
-  tbody.innerHTML = orders.map(o => `
-    <tr>
-      <td style="font-family:monospace;font-size:12px;color:var(--accent)">${o.order_number}</td>
-      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.title}</td>
-      <td>${o.customer_name}</td>
-      <td style="color:var(--text-muted);font-size:12px">${o.machine_name || '—'}</td>
-      <td><span class="badge badge-${o.status}">${statusLabel(o.status)}</span></td>
-      <td><span class="badge badge-${o.priority}">${priorityLabel(o.priority)}</span></td>
-      <td style="font-size:12px;color:${isDueSoon(o.due_date)?'var(--danger)':'var(--text-muted)'}">${formatDate(o.due_date)}</td>
-      <td style="font-weight:600;color:var(--success)">${formatCurrency(o.grand_total)}</td>
-      <td>
-        <button class="btn btn-secondary btn-sm" onclick="openOrderStatusModal(${o.id})">
-          <i data-feather="edit"></i> Update
-        </button>
-      </td>
-    </tr>
-  `).join('');
+  el.innerHTML = orders.map(o => renderOrderCard(o)).join('');
+  feather.replace();
 }
 
-function openAddOrderModal() { openModal('modal-add-order'); calcOrderTotal(); }
+function renderOrderCard(o) {
+  const isCancelled = o.status === 'cancelled';
+  const curIdx      = ORDER_STEP_KEYS.indexOf(o.status);
 
-function calcOrderTotal() {
-  const qty  = parseFloat(document.getElementById('order-qty').value) || 0;
-  const price= parseFloat(document.getElementById('order-price').value) || 0;
-  const disc = parseFloat(document.getElementById('order-discount').value) || 0;
-  const tax  = parseFloat(document.getElementById('order-tax').value) || 0;
-  const sub  = qty * price;
-  const taxAmt = (sub - disc) * (tax / 100);
-  const total  = sub - disc + taxAmt;
-  document.getElementById('calc-subtotal').textContent = formatCurrency(sub);
-  document.getElementById('calc-discount').textContent = '- ' + formatCurrency(disc);
-  document.getElementById('calc-tax').textContent = '+ ' + formatCurrency(taxAmt);
-  document.getElementById('calc-total').textContent = formatCurrency(total);
+  // Build stepper
+  let stepperHtml = '';
+  ORDER_STEPS.forEach((step, idx) => {
+    const isDone    = !isCancelled && idx < curIdx;
+    const isActive  = !isCancelled && idx === curIdx;
+    const isNext    = !isCancelled && idx === curIdx + 1 && o.status !== 'completed';
+    const cls       = isCancelled ? 'cancelled' : isDone ? 'done' : isActive ? 'active' : isNext ? 'next-btn' : '';
+    const labelCls  = isDone ? 'done-label' : isActive ? 'active-label' : '';
+    const title     = isNext ? `Klik → ${step.label}` : step.label;
+    const onclick   = isNext ? `onclick="updateOrderStatus(${o.id},'${step.key}',${o.machine_id||'null'})"` : '';
+
+    if (idx > 0) {
+      stepperHtml += `<div class="step-connector ${isDone ? 'done' : ''}"></div>`;
+    }
+    stepperHtml += `
+      <div class="step-wrapper">
+        <div class="step-dot ${cls}" title="${title}" ${onclick}>
+          <i data-feather="${step.icon}"></i>
+        </div>
+        <div class="step-label ${labelCls}">${step.label}</div>
+      </div>`;
+  });
+
+  // Cancel button (only when not yet completed/cancelled)
+  const canCancel = !['completed','cancelled'].includes(o.status);
+  const cancelBtn = canCancel
+    ? `<button class="btn btn-danger btn-sm" style="font-size:11px;padding:4px 10px"
+         onclick="updateOrderStatus(${o.id},'cancelled',${o.machine_id||'null'})">
+         <i data-feather="x"></i> Batalkan
+       </button>`
+    : '';
+
+  // Delivery badge if completed
+  const deliveryBtn = o.status === 'completed'
+    ? `<button class="btn btn-secondary btn-sm" style="font-size:11px;padding:4px 10px"
+         onclick="openNewDeliveryModal(${o.id})">
+         <i data-feather="truck"></i> Kirim
+       </button>`
+    : '';
+
+  return `
+    <div class="order-card" id="order-card-${o.id}">
+      <div class="order-card-header">
+        <div class="order-card-left">
+          <div class="order-card-num">${o.order_number}</div>
+          <div class="order-card-title">${o.title}</div>
+          <div class="order-card-meta">
+            <span><i data-feather="user"></i>${o.customer_name}</span>
+            ${o.machine_name ? `<span><i data-feather="cpu"></i>${o.machine_name}</span>` : ''}
+            ${o.operator_name ? `<span><i data-feather="tool"></i>${o.operator_name}</span>` : ''}
+            <span><i data-feather="calendar"></i>${formatDate(o.due_date)}</span>
+          </div>
+        </div>
+        <div class="order-card-right">
+          <span class="badge badge-${o.priority}">${priorityLabel(o.priority)}</span>
+          <span style="font-weight:700;color:var(--success);font-size:13px">${formatCurrency(o.grand_total)}</span>
+          ${cancelBtn}
+          ${deliveryBtn}
+        </div>
+      </div>
+      <div class="status-stepper">${stepperHtml}</div>
+      ${isCancelled ? '<div style="font-size:12px;color:var(--danger);margin-top:8px">⛔ Order dibatalkan</div>' : ''}
+    </div>`;
 }
 
-async function submitAddOrder(e) {
-  e.preventDefault();
-  
-  // Cek permission
-  if (!checkPermission('create')) return;
-  
-  const data = {
-    customer_id: document.getElementById('order-customer').value,
-    machine_id: document.getElementById('order-machine').value,
-    operator_id: document.getElementById('order-operator').value,
-    title: document.getElementById('order-title').value,
-    priority: document.getElementById('order-priority').value,
-    quantity: document.getElementById('order-qty').value,
-    unit_price: document.getElementById('order-price').value,
-    discount: document.getElementById('order-discount').value,
-    tax: document.getElementById('order-tax').value,
-    start_date: document.getElementById('order-start').value,
-    due_date: document.getElementById('order-due').value,
-    notes: document.getElementById('order-notes').value,
-  };
-  const res = await apiPost(`${API}orders.php`, data);
+async function updateOrderStatus(orderId, newStatus, machineId) {
+  if (!checkPermission('edit')) return;
+  const label = statusLabel(newStatus);
+  const res = await apiPut(`${API}orders.php`, {
+    id: orderId, status: newStatus,
+    machine_id: machineId, status_only: true
+  });
   if (res?.success) {
-    showToast(`Order ${res.order_number} berhasil dibuat`, 'success');
-    closeModal('modal-add-order');
-    e.target.reset();
-    loadOrders();
-  } else showToast(res?.message || 'Gagal membuat order', 'error');
+    showToast(`Status order → ${label}`, 'success');
+    // Update hanya card ini tanpa reload semua
+    const order = allOrders.find(o => o.id == orderId);
+    if (order) {
+      order.status = newStatus;
+      const card = document.getElementById(`order-card-${orderId}`);
+      if (card) {
+        card.outerHTML = renderOrderCard(order);
+        feather.replace();
+      }
+    }
+    // Jika selesai, tawarkan buat pengiriman
+    if (newStatus === 'completed') {
+      setTimeout(() => openNewDeliveryModal(orderId), 300);
+    }
+  } else {
+    showToast(res?.message || 'Gagal update status', 'error');
+  }
 }
 
-function openOrderStatusModal(id) {
-  document.getElementById('status-order-id').value = id;
-  const order = allOrders.find(o => o.id == id);
+// ── Modal buat pengiriman baru ────────────────────────────────
+async function openNewDeliveryModal(orderId) {
+  const data  = await apiFetch(`${API}orders.php?action=get&id=${orderId}`);
+  const order = data?.data;
+  document.getElementById('new-delivery-order-id').value = orderId;
+  const info = document.getElementById('new-delivery-order-info');
   if (order) {
-    document.getElementById('status-new').value = order.status;
-    document.getElementById('status-machine').value = order.machine_id || '';
+    info.innerHTML = `<span style="font-family:monospace;color:var(--accent);font-weight:700">${order.order_number}</span>
+      <span style="color:var(--text-primary);margin-left:8px">${order.order_title || order.title}</span>
+      <span style="color:var(--text-muted);margin-left:8px;font-size:12px">${order.customer_name}</span>`;
+    document.getElementById('nd-recipient-name').value = order.customer_name || '';
   }
-  openModal('modal-order-status');
+  document.getElementById('nd-recipient-phone').value = '';
+  document.getElementById('nd-city').value    = '';
+  document.getElementById('nd-address').value = '';
+  document.getElementById('nd-eta').value     = '';
+  document.getElementById('nd-notes').value   = '';
+  openModal('modal-new-delivery');
+  feather.replace();
 }
 
-async function submitUpdateOrderStatus() {
-  const id     = document.getElementById('status-order-id').value;
-  const status = document.getElementById('status-new').value;
-  const machId = document.getElementById('status-machine').value;
-  const notes  = document.getElementById('status-notes').value;
-  const res    = await apiPut(`${API}orders.php`, { id, status, machine_id: machId, notes });
+async function submitNewDelivery() {
+  if (!checkPermission('create')) return;
+  const orderId = document.getElementById('new-delivery-order-id').value;
+  const payload = {
+    order_id:            orderId,
+    recipient_name:      document.getElementById('nd-recipient-name').value,
+    recipient_phone:     document.getElementById('nd-recipient-phone').value,
+    destination_city:    document.getElementById('nd-city').value,
+    destination_address: document.getElementById('nd-address').value,
+    estimated_arrival:   document.getElementById('nd-eta').value || null,
+    notes:               document.getElementById('nd-notes').value,
+  };
+  if (!payload.recipient_name || !payload.destination_city || !payload.destination_address) {
+    showToast('Nama penerima, kota, dan alamat wajib diisi', 'warning'); return;
+  }
+  const res = await apiPost(`${API}deliveries.php`, payload);
   if (res?.success) {
-    showToast('Status order diupdate', 'success');
-    closeModal('modal-order-status');
+    showToast('Pengiriman berhasil dibuat', 'success');
+    closeModal('modal-new-delivery');
     loadOrders();
-    if (currentPage === 'monitoring') loadMonitoring();
-  } else showToast('Gagal update order', 'error');
+  } else {
+    showToast(res?.message || 'Gagal membuat pengiriman', 'error');
+  }
+}
+
+// ============================================================
+// DELIVERIES — realtime stepper card
+// ============================================================
+const DELIV_STEPS = [
+  { key: 'prepared',  label: 'Disiapkan',        icon: 'package'     },
+  { key: 'shipping',  label: 'Dikirim',           icon: 'truck'       },
+  { key: 'arrived',   label: 'Tiba di Tujuan',   icon: 'map-pin'     },
+  { key: 'received',  label: 'Diterima',          icon: 'check-circle'},
+];
+const DELIV_STEP_KEYS = DELIV_STEPS.map(s => s.key);
+
+async function loadDeliveries() {
+  const searchEl = document.getElementById('deliveries-search');
+  const statusEl = document.getElementById('deliveries-status-filter');
+  const search = searchEl ? searchEl.value : '';
+  const status = statusEl ? statusEl.value : '';
+  const params = new URLSearchParams({ action: 'list', search, status });
+  const data   = await apiFetch(`${API}deliveries.php?${params}`);
+  allDeliveries = data?.data || [];
+  renderDeliveriesList(allDeliveries);
+
+  const inTransit = allDeliveries.filter(d => d.status === 'shipping').length;
+  const badge = document.getElementById('badge-deliveries');
+  if (badge) { badge.textContent = inTransit; badge.style.display = inTransit > 0 ? 'inline' : 'none'; }
+  feather.replace();
+}
+
+function filterDeliveries() { loadDeliveries(); }
+
+function renderDeliveriesList(deliveries) {
+  const el = document.getElementById('deliveries-list');
+  if (!el) return;
+  if (!deliveries.length) {
+    el.innerHTML = `<div class="card"><div class="empty-state"><i data-feather="truck"></i><h3>Belum ada data pengiriman</h3><p>Pengiriman akan muncul setelah order selesai diproduksi</p></div></div>`;
+    feather.replace(); return;
+  }
+  el.innerHTML = deliveries.map(d => renderDeliveryCard(d)).join('');
+  feather.replace();
+}
+
+function renderDeliveryCard(d) {
+  const curIdx = DELIV_STEP_KEYS.indexOf(d.status);
+  const isDone = d.status === 'received';
+
+  // Stepper
+  let stepperHtml = '';
+  DELIV_STEPS.forEach((step, idx) => {
+    const stepDone   = idx < curIdx;
+    const stepActive = idx === curIdx;
+    const stepNext   = idx === curIdx + 1 && !isDone;
+    const cls        = stepDone ? 'done' : stepActive ? 'active' : stepNext ? 'next-btn' : '';
+    const labelCls   = stepDone ? 'done-label' : stepActive ? 'active-label' : '';
+
+    // "next" untuk arrived → received butuh foto, handle khusus
+    const isToReceived = stepNext && step.key === 'received';
+    const onclick = stepNext && !isToReceived
+      ? `onclick="updateDeliveryStatus(${d.id},'${step.key}')"`
+      : '';
+
+    if (idx > 0) {
+      stepperHtml += `<div class="step-connector ${stepDone ? 'done' : ''}"></div>`;
+    }
+    stepperHtml += `
+      <div class="step-wrapper">
+        <div class="step-dot ${cls}" title="${stepNext ? 'Klik → ' + step.label : step.label}" ${onclick}>
+          <i data-feather="${step.icon}"></i>
+        </div>
+        <div class="step-label ${labelCls}">${step.label}</div>
+      </div>`;
+  });
+
+  // Zona upload foto jika status = arrived
+  const showProofZone = d.status === 'arrived';
+  const proofZone = showProofZone ? `
+    <div class="proof-upload-zone" id="proof-zone-${d.id}">
+      <label>
+        <i data-feather="camera"></i> Pilih Foto Bukti
+        <input type="file" accept="image/*" id="proof-file-${d.id}"
+          onchange="previewProof(${d.id}, this)" />
+      </label>
+      <img class="proof-preview" id="proof-preview-${d.id}" />
+      <div class="proof-upload-note">
+        JPG / PNG / WEBP, maks. 5MB<br>
+        <span style="color:var(--warning);font-size:10px">⚠️ Foto wajib sebelum konfirmasi diterima</span>
+      </div>
+      <button class="btn-confirm-received" id="btn-received-${d.id}"
+        onclick="submitReceived(${d.id})" disabled>
+        <i data-feather="check-circle"></i> Konfirmasi Diterima
+      </button>
+    </div>` : '';
+
+  // Tampilkan foto jika sudah received
+  const proofDisplay = d.proof_image ? `
+    <div style="margin-top:10px;display:flex;align-items:center;gap:10px">
+      <img src="uploads/proof/${d.proof_image}" class="proof-img-thumb"
+        onclick="openLightbox('uploads/proof/${d.proof_image}')"
+        title="Klik untuk perbesar" />
+      <span style="font-size:12px;color:var(--success)">✅ Bukti pengiriman tersedia</span>
+    </div>` : '';
+
+  return `
+    <div class="order-card" id="delivery-card-${d.id}">
+      <div class="order-card-header">
+        <div class="order-card-left">
+          <div class="order-card-num">${d.order_number}</div>
+          <div class="order-card-title">${d.order_title}</div>
+          <div class="order-card-meta">
+            <span><i data-feather="user"></i>${d.customer_name}</span>
+            <span><i data-feather="map-pin"></i>${d.destination_city || '—'}</span>
+            <span><i data-feather="phone"></i>${d.recipient_name || '—'}</span>
+            ${d.estimated_arrival ? `<span><i data-feather="calendar"></i>Est. ${formatDate(d.estimated_arrival)}</span>` : ''}
+          </div>
+        </div>
+        <div class="order-card-right">
+          <span class="badge badge-delivery-${d.status}">${deliveryStatusLabel(d.status)}</span>
+        </div>
+      </div>
+      <div class="status-stepper">${stepperHtml}</div>
+      ${proofZone}
+      ${proofDisplay}
+    </div>`;
+}
+
+async function updateDeliveryStatus(id, newStatus) {
+  if (!checkPermission('edit')) return;
+  const res = await apiPut(`${API}deliveries.php`, { id, status: newStatus });
+  if (res?.success) {
+    showToast(`Pengiriman → ${deliveryStatusLabel(newStatus)}`, 'success');
+    loadDeliveries();
+  } else {
+    showToast(res?.message || 'Gagal update status pengiriman', 'error');
+  }
+}
+
+function previewProof(id, input) {
+  const file    = input.files[0];
+  const preview = document.getElementById(`proof-preview-${id}`);
+  const btn     = document.getElementById(`btn-received-${id}`);
+  if (file) {
+    const reader = new FileReader();
+    reader.onload = e => {
+      preview.src = e.target.result;
+      preview.style.display = 'block';
+    };
+    reader.readAsDataURL(file);
+    btn.disabled = false;
+  } else {
+    preview.style.display = 'none';
+    btn.disabled = true;
+  }
+}
+
+async function submitReceived(id) {
+  if (!checkPermission('edit')) return;
+  const fileInput = document.getElementById(`proof-file-${id}`);
+  if (!fileInput?.files[0]) {
+    showToast('Pilih foto bukti pengiriman terlebih dahulu', 'warning'); return;
+  }
+
+  const btn = document.getElementById(`btn-received-${id}`);
+  btn.disabled = true;
+  btn.innerHTML = '<i data-feather="refresh-cw"></i> Menyimpan...';
+  feather.replace();
+
+  const formData = new FormData();
+  formData.append('id',          id);
+  formData.append('proof_image', fileInput.files[0]);
+
+  try {
+    // Gunakan POST + action=confirm_received karena PHP tidak baca $_FILES di PUT
+    const res  = await fetch(`${API}deliveries.php?action=confirm_received`, {
+      method: 'POST',
+      body: formData
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast('Pengiriman dikonfirmasi diterima ✅', 'success');
+      loadDeliveries();
+    } else {
+      showToast(data.message || 'Gagal konfirmasi', 'error');
+      btn.disabled = false;
+      btn.innerHTML = '<i data-feather="check-circle"></i> Konfirmasi Diterima';
+      feather.replace();
+    }
+  } catch(e) {
+    console.error(e);
+    showToast('Koneksi bermasalah', 'error');
+    btn.disabled = false;
+    btn.innerHTML = '<i data-feather="check-circle"></i> Konfirmasi Diterima';
+    feather.replace();
+  }
+}
+
+function openLightbox(src) {
+  document.getElementById('lightbox-img').src = src;
+  document.getElementById('lightbox').classList.add('open');
+}
+
+function deliveryStatusLabel(s) {
+  const map = { prepared:'Disiapkan', shipping:'Dalam Pengiriman', arrived:'Tiba di Tujuan', received:'Diterima' };
+  return map[s] || s;
 }
 
 // ============================================================
@@ -881,255 +1138,100 @@ let allCustomers = [];
 async function loadCustomers() {
   const data = await apiFetch(API + 'customers.php');
   allCustomers = data?.data || [];
-  renderCustomersTable(allCustomers);
+  renderCustomersList(allCustomers);
   feather.replace();
 }
 
 function filterCustomers() {
   const q = document.getElementById('customers-search').value.toLowerCase();
-  renderCustomersTable(allCustomers.filter(c => 
-    c.name.toLowerCase().includes(q) || 
-    c.code.toLowerCase().includes(q) ||
+  renderCustomersList(allCustomers.filter(c =>
+    c.name.toLowerCase().includes(q) ||
+    (c.phone && c.phone.includes(q)) ||
     (c.city && c.city.toLowerCase().includes(q))
   ));
 }
 
-function renderCustomersTable(customers) {
-  const tbody = document.getElementById('customers-tbody');
+function renderCustomersList(customers) {
+  const el = document.getElementById('customers-list');
+  if (!el) return;
   if (!customers.length) {
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted)">Tidak ada data pelanggan</td></tr>';
-    return;
+    el.innerHTML = `<div class="card"><div class="empty-state">
+      <i data-feather="users"></i>
+      <h3>Belum ada pelanggan</h3>
+      <p>Pelanggan akan otomatis terdaftar saat order baru dibuat.</p>
+      <a href="order_baru.php" class="btn btn-primary mt-4">
+        <i data-feather="plus-circle"></i> Input Order Baru
+      </a>
+    </div></div>`;
+    feather.replace(); return;
   }
-  tbody.innerHTML = customers.map(c => `
-    <tr>
-      <td style="font-family:monospace;font-size:12px;color:var(--accent)">${c.code}</td>
-      <td style="font-weight:600">${c.name}</td>
-      <td style="color:var(--text-muted)">${c.contact_person || '—'}</td>
-      <td style="color:var(--text-muted)">${c.phone || '—'}</td>
-      <td style="color:var(--text-muted)">${c.city || '—'}</td>
-      <td>
-        <div style="display:flex;gap:4px">
-          <button class="btn btn-secondary btn-sm btn-icon" onclick="openEditCustomerModal(${c.id})" title="Edit"><i data-feather="edit-2"></i></button>
-          <button class="btn btn-danger btn-sm btn-icon" onclick="deleteCustomer(${c.id})" title="Hapus"><i data-feather="trash-2"></i></button>
+
+  el.innerHTML = customers.map(c => `
+    <div class="order-card" style="cursor:pointer" onclick="lihatHistory(${c.id})">
+      <div class="order-card-header">
+        <div class="order-card-left">
+          <div style="display:flex;align-items:center;gap:10px">
+            <div style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--secondary));
+                        display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:white;flex-shrink:0">
+              ${c.name.charAt(0).toUpperCase()}
+            </div>
+            <div>
+              <div style="font-size:15px;font-weight:700;color:var(--text-primary)">${c.name}</div>
+              <div class="order-card-meta">
+                <span><i data-feather="phone"></i>${c.phone || '—'}</span>
+                ${c.city ? `<span><i data-feather="map-pin"></i>${c.city}</span>` : ''}
+                <span style="font-family:monospace;font-size:11px;color:var(--text-muted)">${c.code}</span>
+              </div>
+            </div>
+          </div>
         </div>
-      </td>
-    </tr>
-  `).join('');
-  feather.replace();
-}
-
-function openAddCustomerModal() {
-  document.getElementById('modal-customer-title').textContent = 'Tambah Pelanggan';
-  document.getElementById('customer-id').value = '';
-  document.getElementById('cust-code').disabled = false;
-  document.querySelector('#modal-add-customer form').reset();
-  openModal('modal-add-customer');
-}
-
-async function openEditCustomerModal(id) {
-  const data = await apiFetch(`${API}customers.php?action=get&id=${id}`);
-  if (!data?.berhasil) {
-    showToast('Gagal mengambil data pelanggan', 'error');
-    return;
-  }
-  
-  const customer = data.data;
-  document.getElementById('modal-customer-title').textContent = 'Edit Pelanggan';
-  document.getElementById('customer-id').value = customer.id;
-  document.getElementById('cust-code').value = customer.code;
-  document.getElementById('cust-code').disabled = true;
-  document.getElementById('cust-name').value = customer.name;
-  document.getElementById('cust-contact').value = customer.contact_person || '';
-  document.getElementById('cust-phone').value = customer.phone || '';
-  document.getElementById('cust-email').value = customer.email || '';
-  document.getElementById('cust-city').value = customer.city || '';
-  document.getElementById('cust-address').value = customer.address || '';
-  document.getElementById('cust-notes').value = customer.notes || '';
-  
-  openModal('modal-add-customer');
-  feather.replace();
-}
-
-async function submitAddCustomer(e) {
-  e.preventDefault();
-  
-  const customerId = document.getElementById('customer-id').value;
-  const isEdit = customerId !== '';
-  
-  const data = {
-    code: document.getElementById('cust-code').value,
-    name: document.getElementById('cust-name').value,
-    contact_person: document.getElementById('cust-contact').value,
-    phone: document.getElementById('cust-phone').value,
-    email: document.getElementById('cust-email').value,
-    city: document.getElementById('cust-city').value,
-    address: document.getElementById('cust-address').value,
-    notes: document.getElementById('cust-notes').value,
-  };
-  
-  let res;
-  if (isEdit) {
-    data.id = customerId;
-    res = await apiPut(`${API}customers.php`, data);
-  } else {
-    res = await apiPost(`${API}customers.php`, data);
-  }
-  
-  if (res?.berhasil) {
-    showToast(isEdit ? 'Pelanggan berhasil diupdate' : 'Pelanggan berhasil ditambahkan', 'success');
-    closeModal('modal-add-customer');
-    e.target.reset();
-    document.getElementById('customer-id').value = '';
-    document.getElementById('cust-code').disabled = false;
-    loadCustomers();
-    loadRefData();
-  } else {
-    showToast(res?.pesan || 'Gagal menyimpan pelanggan', 'error');
-  }
-}
-
-async function deleteCustomer(id) {
-  // Cek permission
-  if (!checkPermission('delete')) return;
-  
-  if (!confirm('Hapus pelanggan ini?')) return;
-  const res = await apiFetch(`${API}customers.php?id=${id}`, { method: 'DELETE' });
-  if (res?.berhasil) {
-    showToast('Pelanggan berhasil dihapus', 'success');
-    loadCustomers();
-  } else {
-    showToast('Gagal menghapus pelanggan', 'error');
-  }
-}
-
-// ============================================================
-// SUPPLIERS
-// ============================================================
-async function loadSuppliers() {
-  const data = await apiFetch(API + 'suppliers.php');
-  allSuppliers = data?.data || [];
-  renderSuppliersGrid(allSuppliers);
-  feather.replace();
-}
-
-function filterSuppliers() {
-  const q = document.getElementById('suppliers-search').value.toLowerCase();
-  renderSuppliersGrid(allSuppliers.filter(s => s.name.toLowerCase().includes(q) || s.code.toLowerCase().includes(q)));
-}
-
-function renderSuppliersGrid(suppliers) {
-  const el = document.getElementById('suppliers-grid');
-  if (!suppliers.length) { el.innerHTML = '<div class="empty-state"><i data-feather="truck"></i><h3>Tidak ada supplier</h3></div>'; feather.replace(); return; }
-  el.innerHTML = suppliers.map(s => `
-    <div class="card" style="cursor:default">
-      <div class="flex justify-between mb-4">
-        <div>
-          <div style="font-family:monospace;font-size:11px;color:var(--accent);margin-bottom:4px">${s.code}</div>
-          <div style="font-size:15px;font-weight:700">${s.name}</div>
+        <div class="order-card-right">
+          <span style="font-size:12px;color:var(--text-muted)">Lihat Riwayat</span>
+          <i data-feather="chevron-right" style="width:16px;height:16px;stroke:var(--text-muted)"></i>
         </div>
-        <span class="badge badge-${s.is_active=='1'?'active':'offline'}">${s.is_active=='1'?'Aktif':'Nonaktif'}</span>
-      </div>
-      ${s.contact_person ? `<div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">👤 ${s.contact_person}</div>` : ''}
-      ${s.phone ? `<div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">📞 ${s.phone}</div>` : ''}
-      ${s.city ? `<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">📍 ${s.city}</div>` : ''}
-      <div style="display:flex;gap:4px;margin-top:auto;padding-top:8px;border-top:1px solid var(--border)">
-        <button class="btn btn-secondary btn-sm btn-icon" onclick="openEditSupplierModal(${s.id})" title="Edit"><i data-feather="edit-2"></i></button>
-        <button class="btn btn-danger btn-sm btn-icon" onclick="deleteSupplier(${s.id})" title="Hapus"><i data-feather="trash-2"></i></button>
       </div>
     </div>
   `).join('');
   feather.replace();
 }
 
-function openAddSupplierModal() {
-  document.getElementById('modal-supplier-title').textContent = 'Tambah Supplier';
-  document.getElementById('supplier-id').value = '';
-  document.getElementById('sup-code').disabled = false;
-  document.querySelector('#modal-add-supplier form').reset();
-  openModal('modal-add-supplier');
-}
+async function lihatHistory(id) {
+  const panel = document.getElementById('customer-history-panel');
+  const tbody = document.getElementById('history-tbody');
+  panel.style.display = 'block';
+  tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted)">Memuat...</td></tr>';
+  panel.scrollIntoView({behavior:'smooth', block:'start'});
 
-async function openEditSupplierModal(id) {
-  const data = await apiFetch(`${API}suppliers.php?action=get&id=${id}`);
-  if (!data?.berhasil) {
-    showToast('Gagal mengambil data supplier', 'error');
-    return;
+  const data = await apiFetch(`${API}customers.php?action=history&id=${id}`);
+  if (!data?.success) { tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--danger)">Gagal memuat data</td></tr>'; return; }
+
+  document.getElementById('history-panel-name').textContent  = data.customer?.name || '';
+  document.getElementById('history-panel-phone').textContent = data.customer?.phone || '';
+
+  const orders = data.orders || [];
+  if (!orders.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted)">Belum ada order</td></tr>';
+    feather.replace(); return;
   }
-  
-  const supplier = data.data;
-  document.getElementById('modal-supplier-title').textContent = 'Edit Supplier';
-  document.getElementById('supplier-id').value = supplier.id;
-  document.getElementById('sup-code').value = supplier.code;
-  document.getElementById('sup-code').disabled = true;
-  document.getElementById('sup-name').value = supplier.name;
-  document.getElementById('sup-contact').value = supplier.contact_person || '';
-  document.getElementById('sup-phone').value = supplier.phone || '';
-  document.getElementById('sup-email').value = supplier.email || '';
-  document.getElementById('sup-city').value = supplier.city || '';
-  document.getElementById('sup-address').value = supplier.address || '';
-  document.getElementById('sup-notes').value = supplier.notes || '';
-  
-  openModal('modal-add-supplier');
+
+  tbody.innerHTML = orders.map(o => `
+    <tr>
+      <td style="font-family:monospace;font-size:12px;color:var(--accent)">${o.order_number}</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.title}</td>
+      <td><span class="badge badge-${o.status}">${statusLabel(o.status)}</span></td>
+      <td>${o.delivery_status
+        ? `<span class="badge badge-delivery-${o.delivery_status}">${deliveryStatusLabel(o.delivery_status)}</span>`
+        : '<span style="color:var(--text-muted);font-size:12px">—</span>'}</td>
+      <td style="font-weight:600;color:var(--success)">${formatCurrency(o.grand_total)}</td>
+      <td style="font-size:12px;color:var(--text-muted)">${formatDate(o.created_at)}</td>
+    </tr>
+  `).join('');
   feather.replace();
 }
 
-async function submitAddSupplier(e) {
-  e.preventDefault();
-  
-  const supplierId = document.getElementById('supplier-id').value;
-  const isEdit = supplierId !== '';
-  
-  // Cek permission
-  if (isEdit && !checkPermission('edit')) return;
-  if (!isEdit && !checkPermission('create')) return;
-  
-  const data = {
-    code: document.getElementById('sup-code').value,
-    name: document.getElementById('sup-name').value,
-    contact_person: document.getElementById('sup-contact').value,
-    phone: document.getElementById('sup-phone').value,
-    email: document.getElementById('sup-email').value,
-    city: document.getElementById('sup-city').value,
-    address: document.getElementById('sup-address').value,
-    notes: document.getElementById('sup-notes').value,
-  };
-  
-  let res;
-  if (isEdit) {
-    data.id = supplierId;
-    res = await apiPut(`${API}suppliers.php`, data);
-  } else {
-    res = await apiPost(`${API}suppliers.php`, data);
-  }
-  
-  if (res?.berhasil) {
-    showToast(isEdit ? 'Supplier berhasil diupdate' : 'Supplier berhasil ditambahkan', 'success');
-    closeModal('modal-add-supplier');
-    e.target.reset();
-    document.getElementById('supplier-id').value = '';
-    document.getElementById('sup-code').disabled = false;
-    loadSuppliers();
-    loadRefData();
-  } else {
-    showToast(res?.pesan || 'Gagal menyimpan supplier', 'error');
-  }
+function tutupHistory() {
+  document.getElementById('customer-history-panel').style.display = 'none';
 }
-
-async function deleteSupplier(id) {
-  // Cek permission
-  if (!checkPermission('delete')) return;
-  
-  if (!confirm('Hapus supplier ini?')) return;
-  const res = await apiFetch(`${API}suppliers.php?id=${id}`, { method: 'DELETE' });
-  if (res?.berhasil) {
-    showToast('Supplier berhasil dihapus', 'success');
-    loadSuppliers();
-  } else {
-    showToast('Gagal menghapus supplier', 'error');
-  }
-}
-
-// Fungsi loadCustomers sudah didefinisikan di atas, hapus duplikat ini
 
 // ============================================================
 // REPORTS

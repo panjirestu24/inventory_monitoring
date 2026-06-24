@@ -55,7 +55,7 @@ $userInfo = getUserInfo();
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <script src="https://unpkg.com/feather-icons"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-  <link rel="stylesheet" href="css/app.css" />
+  <link rel="stylesheet" href="css/app.css?v=<?= time() ?>" />
   <script>
     // Pass PHP variables ke JavaScript
     window.APP_CONFIG = {
@@ -107,18 +107,19 @@ $userInfo = getUserInfo();
         <div class="nav-item" data-page="stock-mutation">
           <i data-feather="repeat"></i> Mutasi Stok
         </div>
-        <div class="nav-item" data-page="purchases">
-          <i data-feather="shopping-cart"></i> Pembelian
-        </div>
-        <div class="nav-item" data-page="suppliers">
-          <i data-feather="truck"></i> Supplier
-        </div>
       </div>
 
       <div class="nav-group">
         <div class="nav-group-label">Produksi</div>
+        <div class="nav-item" onclick="window.location.href='order_baru.php'" style="cursor:pointer">
+          <i data-feather="plus-circle"></i> Input Order Baru
+        </div>
         <div class="nav-item" data-page="orders">
           <i data-feather="file-text"></i> Order Cetak
+        </div>
+        <div class="nav-item" data-page="deliveries">
+          <i data-feather="truck"></i> Pengiriman
+          <span class="nav-badge" id="badge-deliveries" style="display:none">0</span>
         </div>
         <div class="nav-item" data-page="machines">
           <i data-feather="cpu"></i> Mesin
@@ -457,31 +458,14 @@ $userInfo = getUserInfo();
             <option value="completed">Selesai</option>
             <option value="cancelled">Dibatalkan</option>
           </select>
-          <button class="btn btn-primary btn-sm" onclick="openAddOrderModal()">
-            <i data-feather="plus"></i> Buat Order
-          </button>
+          <a href="order_baru.php" class="btn btn-primary btn-sm">
+            <i data-feather="plus-circle"></i> Input Order Baru
+          </a>
         </div>
-        <div class="card">
-          <div class="table-wrapper">
-            <table>
-              <thead>
-                <tr>
-                  <th>No. Order</th>
-                  <th>Pekerjaan</th>
-                  <th>Pelanggan</th>
-                  <th>Mesin</th>
-                  <th>Status</th>
-                  <th>Prioritas</th>
-                  <th>Jatuh Tempo</th>
-                  <th>Total</th>
-                  <th>Aksi</th>
-                </tr>
-              </thead>
-              <tbody id="orders-tbody">
-                <tr><td colspan="9"><div class="skeleton" style="height:36px"></div></td></tr>
-              </tbody>
-            </table>
-          </div>
+        <div id="orders-list">
+          <div class="skeleton" style="height:120px;margin-bottom:12px;border-radius:12px"></div>
+          <div class="skeleton" style="height:120px;margin-bottom:12px;border-radius:12px"></div>
+          <div class="skeleton" style="height:120px;border-radius:12px"></div>
         </div>
       </div>
 
@@ -491,20 +475,7 @@ $userInfo = getUserInfo();
       </div>
 
       <!-- ========== SUPPLIERS PAGE ========== -->
-      <div class="page" id="page-suppliers">
-        <div class="filter-bar">
-          <div class="search-box">
-            <i data-feather="search"></i>
-            <input type="text" id="suppliers-search" placeholder="Cari supplier..." oninput="filterSuppliers()" />
-          </div>
-          <button class="btn btn-primary btn-sm" onclick="openAddSupplierModal()">
-            <i data-feather="plus"></i> Tambah Supplier
-          </button>
-        </div>
-        <div class="grid-auto" id="suppliers-grid">
-          <!-- Cards -->
-        </div>
-      </div>
+      <div class="page" id="page-suppliers" style="display:none"></div>
 
       <!-- ========== CUSTOMERS PAGE ========== -->
       <div class="page" id="page-customers">
@@ -513,31 +484,68 @@ $userInfo = getUserInfo();
             <i data-feather="search"></i>
             <input type="text" id="customers-search" placeholder="Cari pelanggan..." oninput="filterCustomers()" />
           </div>
-          <button class="btn btn-primary btn-sm" onclick="openAddCustomerModal()">
-            <i data-feather="plus"></i> Tambah Pelanggan
-          </button>
         </div>
-        <div class="card">
-          <div class="table-wrapper">
-            <table>
-              <thead>
-                <tr><th>Kode</th><th>Nama</th><th>Kontak</th><th>Telepon</th><th>Kota</th><th>Aksi</th></tr>
-              </thead>
-              <tbody id="customers-tbody"></tbody>
-            </table>
+        <div id="customers-list">
+          <div class="skeleton" style="height:80px;margin-bottom:10px;border-radius:12px"></div>
+          <div class="skeleton" style="height:80px;margin-bottom:10px;border-radius:12px"></div>
+          <div class="skeleton" style="height:80px;border-radius:12px"></div>
+        </div>
+
+        <!-- Panel riwayat order pelanggan -->
+        <div id="customer-history-panel" style="display:none;margin-top:24px">
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title" id="history-panel-name">Riwayat Order</div>
+                <div style="font-size:12px;color:var(--text-muted)" id="history-panel-phone"></div>
+              </div>
+              <button class="btn btn-secondary btn-sm" onclick="tutupHistory()">
+                <i data-feather="x"></i> Tutup
+              </button>
+            </div>
+            <div class="table-wrapper">
+              <table>
+                <thead>
+                  <tr>
+                    <th>No. Order</th>
+                    <th>Pesanan</th>
+                    <th>Status</th>
+                    <th>Pengiriman</th>
+                    <th>Total</th>
+                    <th>Tanggal</th>
+                  </tr>
+                </thead>
+                <tbody id="history-tbody">
+                  <tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted)">Memuat...</td></tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       </div>
 
-      <!-- ========== PURCHASES PAGE ========== -->
-      <div class="page" id="page-purchases">
-        <div class="card">
-          <div class="empty-state">
-            <i data-feather="shopping-cart"></i>
-            <h3>Modul Pembelian</h3>
-            <p>Fitur pembelian bahan baku akan tersedia. Tambahkan PO ke supplier.</p>
-            <button class="btn btn-primary mt-4" onclick="showToast('Segera hadir!','info')">Buat PO Baru</button>
+      <!-- ========== DELIVERIES PAGE ========== -->
+      <div class="page" id="page-deliveries">
+        <div class="filter-bar">
+          <div class="search-box">
+            <i data-feather="search"></i>
+            <input type="text" id="deliveries-search" placeholder="Cari no. order, pelanggan, kota tujuan..." oninput="filterDeliveries()" />
           </div>
+          <select class="form-control" id="deliveries-status-filter" onchange="filterDeliveries()" style="width:auto">
+            <option value="">Semua Status</option>
+            <option value="prepared">Disiapkan</option>
+            <option value="shipping">Dalam Pengiriman</option>
+            <option value="arrived">Tiba di Tujuan</option>
+            <option value="received">Diterima</option>
+          </select>
+          <a href="track.php" target="_blank" class="btn btn-secondary btn-sm">
+            <i data-feather="external-link"></i> Halaman Tracking
+          </a>
+        </div>
+        <div id="deliveries-list">
+          <div class="skeleton" style="height:140px;margin-bottom:12px;border-radius:12px"></div>
+          <div class="skeleton" style="height:140px;margin-bottom:12px;border-radius:12px"></div>
+          <div class="skeleton" style="height:140px;border-radius:12px"></div>
         </div>
       </div>
 
@@ -616,34 +624,22 @@ $userInfo = getUserInfo();
       </div>
       <div class="form-row">
         <div class="form-group">
-          <label class="form-label">Supplier</label>
-          <select class="form-control" id="item-supplier">
-            <option value="">-- Pilih Supplier --</option>
-          </select>
-        </div>
-        <div class="form-group">
           <label class="form-label">Lokasi Penyimpanan</label>
           <input class="form-control" id="item-location" placeholder="Contoh: Gudang A-1" />
         </div>
-      </div>
-      <div class="form-row">
         <div class="form-group">
           <label class="form-label">Stok Awal</label>
           <input type="number" class="form-control" id="item-stock" value="0" min="0" step="0.01" />
         </div>
+      </div>
+      <div class="form-row">
         <div class="form-group">
           <label class="form-label">Stok Minimum *</label>
           <input type="number" class="form-control" id="item-min-stock" value="0" min="0" step="0.01" required />
         </div>
-      </div>
-      <div class="form-row">
         <div class="form-group">
           <label class="form-label">Harga Beli (Rp)</label>
           <input type="number" class="form-control" id="item-buy-price" value="0" min="0" />
-        </div>
-        <div class="form-group">
-          <label class="form-label">Harga Jual (Rp)</label>
-          <input type="number" class="form-control" id="item-sell-price" value="0" min="0" />
         </div>
       </div>
       <div class="form-group">
@@ -658,255 +654,58 @@ $userInfo = getUserInfo();
   </div>
 </div>
 
-<!-- Add Order Modal -->
-<div class="modal-overlay" id="modal-add-order">
-  <div class="modal modal-lg">
-    <div class="modal-header">
-      <div class="modal-title">Buat Order Cetak Baru</div>
-      <button class="modal-close" onclick="closeModal('modal-add-order')"><i data-feather="x"></i></button>
-    </div>
-    <form onsubmit="submitAddOrder(event)">
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">Pelanggan *</label>
-          <select class="form-control" id="order-customer" required></select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Prioritas</label>
-          <select class="form-control" id="order-priority">
-            <option value="low">Rendah</option>
-            <option value="normal" selected>Normal</option>
-            <option value="high">Tinggi</option>
-            <option value="urgent">Urgent</option>
-          </select>
-        </div>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Judul Pekerjaan *</label>
-        <input class="form-control" id="order-title" required placeholder="Contoh: Cetak Brosur A4 Full Color" />
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">Mesin</label>
-          <select class="form-control" id="order-machine">
-            <option value="">-- Pilih Mesin --</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Operator</label>
-          <select class="form-control" id="order-operator">
-            <option value="">-- Pilih Operator --</option>
-          </select>
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">Jumlah *</label>
-          <input type="number" class="form-control" id="order-qty" required min="1" placeholder="1000" oninput="calcOrderTotal()" />
-        </div>
-        <div class="form-group">
-          <label class="form-label">Harga Satuan (Rp) *</label>
-          <input type="number" class="form-control" id="order-price" required min="0" placeholder="500" oninput="calcOrderTotal()" />
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">Diskon (Rp)</label>
-          <input type="number" class="form-control" id="order-discount" value="0" min="0" oninput="calcOrderTotal()" />
-        </div>
-        <div class="form-group">
-          <label class="form-label">PPN (%)</label>
-          <input type="number" class="form-control" id="order-tax" value="11" min="0" max="100" oninput="calcOrderTotal()" />
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">Tanggal Mulai</label>
-          <input type="date" class="form-control" id="order-start" />
-        </div>
-        <div class="form-group">
-          <label class="form-label">Jatuh Tempo *</label>
-          <input type="date" class="form-control" id="order-due" required />
-        </div>
-      </div>
-      <div class="card" style="background:var(--bg-base);margin-bottom:16px">
-        <div class="flex justify-between mb-4">
-          <span style="color:var(--text-muted)">Subtotal</span>
-          <span id="calc-subtotal" style="font-weight:600">Rp 0</span>
-        </div>
-        <div class="flex justify-between mb-4">
-          <span style="color:var(--text-muted)">Diskon</span>
-          <span id="calc-discount" style="color:var(--danger)">- Rp 0</span>
-        </div>
-        <div class="flex justify-between mb-4">
-          <span style="color:var(--text-muted)">PPN</span>
-          <span id="calc-tax">+ Rp 0</span>
-        </div>
-        <div class="divider"></div>
-        <div class="flex justify-between">
-          <span style="font-weight:700;font-size:15px">TOTAL</span>
-          <span id="calc-total" style="font-weight:800;font-size:18px;color:var(--accent)">Rp 0</span>
-        </div>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Catatan</label>
-        <textarea class="form-control" id="order-notes" placeholder="Instruksi khusus, catatan finishing, dll..."></textarea>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" onclick="closeModal('modal-add-order')">Batal</button>
-        <button type="submit" class="btn btn-primary"><i data-feather="check"></i> Buat Order</button>
-      </div>
-    </form>
-  </div>
-</div>
-
-<!-- Update Order Status Modal -->
-<div class="modal-overlay" id="modal-order-status">
+<!-- Modal: Buat Pengiriman Baru (dari order selesai) -->
+<div class="modal-overlay" id="modal-new-delivery">
   <div class="modal">
     <div class="modal-header">
-      <div class="modal-title">Update Status Order</div>
-      <button class="modal-close" onclick="closeModal('modal-order-status')"><i data-feather="x"></i></button>
+      <div class="modal-title">🚚 Buat Data Pengiriman</div>
+      <button class="modal-close" onclick="closeModal('modal-new-delivery')"><i data-feather="x"></i></button>
     </div>
-    <input type="hidden" id="status-order-id" />
-    <div class="form-group">
-      <label class="form-label">Status Baru</label>
-      <select class="form-control" id="status-new">
-        <option value="pending">Pending</option>
-        <option value="confirmed">Dikonfirmasi</option>
-        <option value="in_progress">Dalam Proses</option>
-        <option value="quality_check">Quality Check</option>
-        <option value="completed">Selesai</option>
-        <option value="cancelled">Dibatalkan</option>
-      </select>
+    <input type="hidden" id="new-delivery-order-id" />
+    <div id="new-delivery-order-info" style="background:var(--bg-base);border-radius:var(--radius-sm);padding:12px;margin-bottom:18px;font-size:13px;"></div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Nama Penerima *</label>
+        <input class="form-control" id="nd-recipient-name" required placeholder="Nama penerima" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">No. Telepon Penerima</label>
+        <input class="form-control" id="nd-recipient-phone" placeholder="08xx-xxxx-xxxx" />
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Kota Tujuan *</label>
+        <input class="form-control" id="nd-city" required placeholder="Jakarta" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Estimasi Tiba</label>
+        <input type="date" class="form-control" id="nd-eta" />
+      </div>
     </div>
     <div class="form-group">
-      <label class="form-label">Mesin</label>
-      <select class="form-control" id="status-machine"></select>
+      <label class="form-label">Alamat Lengkap Tujuan *</label>
+      <textarea class="form-control" id="nd-address" rows="2" required placeholder="Jl. Merdeka No. 10..."></textarea>
     </div>
     <div class="form-group">
       <label class="form-label">Catatan</label>
-      <textarea class="form-control" id="status-notes" rows="3"></textarea>
+      <textarea class="form-control" id="nd-notes" rows="2" placeholder="Instruksi pengiriman..."></textarea>
     </div>
     <div class="modal-footer">
-      <button type="button" class="btn btn-secondary" onclick="closeModal('modal-order-status')">Batal</button>
-      <button class="btn btn-primary" onclick="submitUpdateOrderStatus()"><i data-feather="save"></i> Update</button>
+      <button type="button" class="btn btn-secondary" onclick="closeModal('modal-new-delivery')">Nanti</button>
+      <button class="btn btn-primary" onclick="submitNewDelivery()"><i data-feather="truck"></i> Buat Pengiriman</button>
     </div>
-  </div>
-</div>
-
-<!-- Add Supplier Modal -->
-<div class="modal-overlay" id="modal-add-supplier">
-  <div class="modal">
-    <div class="modal-header">
-      <div class="modal-title" id="modal-supplier-title">Tambah Supplier</div>
-      <button class="modal-close" onclick="closeModal('modal-add-supplier')"><i data-feather="x"></i></button>
-    </div>
-    <form onsubmit="submitAddSupplier(event)">
-      <input type="hidden" id="supplier-id" value="">
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">Kode Supplier *</label>
-          <input class="form-control" id="sup-code" required placeholder="SUP005" />
-        </div>
-        <div class="form-group">
-          <label class="form-label">Nama Supplier *</label>
-          <input class="form-control" id="sup-name" required placeholder="Nama perusahaan" />
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">Kontak Person</label>
-          <input class="form-control" id="sup-contact" placeholder="Nama PIC" />
-        </div>
-        <div class="form-group">
-          <label class="form-label">Telepon</label>
-          <input class="form-control" id="sup-phone" placeholder="021-..." />
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">Email</label>
-          <input type="email" class="form-control" id="sup-email" placeholder="email@supplier.com" />
-        </div>
-        <div class="form-group">
-          <label class="form-label">Kota</label>
-          <input class="form-control" id="sup-city" placeholder="Jakarta" />
-        </div>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Alamat</label>
-        <textarea class="form-control" id="sup-address" rows="2" placeholder="Alamat lengkap..."></textarea>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Catatan</label>
-        <textarea class="form-control" id="sup-notes" rows="2" placeholder="Catatan tambahan (opsional)..."></textarea>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" onclick="closeModal('modal-add-supplier')">Batal</button>
-        <button type="submit" class="btn btn-primary"><i data-feather="save"></i> Simpan</button>
-      </div>
-    </form>
-  </div>
-</div>
-
-<!-- Add/Edit Customer Modal -->
-<div class="modal-overlay" id="modal-add-customer">
-  <div class="modal">
-    <div class="modal-header">
-      <div class="modal-title" id="modal-customer-title">Tambah Pelanggan</div>
-      <button class="modal-close" onclick="closeModal('modal-add-customer')"><i data-feather="x"></i></button>
-    </div>
-    <form onsubmit="submitAddCustomer(event)">
-      <input type="hidden" id="customer-id" value="">
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">Kode Pelanggan *</label>
-          <input class="form-control" id="cust-code" required placeholder="CUS006" />
-        </div>
-        <div class="form-group">
-          <label class="form-label">Nama Pelanggan *</label>
-          <input class="form-control" id="cust-name" required placeholder="Nama pelanggan/perusahaan" />
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">Kontak Person</label>
-          <input class="form-control" id="cust-contact" placeholder="Nama PIC" />
-        </div>
-        <div class="form-group">
-          <label class="form-label">Telepon</label>
-          <input class="form-control" id="cust-phone" placeholder="08xx-xxxx-xxxx" />
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">Email</label>
-          <input type="email" class="form-control" id="cust-email" placeholder="email@pelanggan.com" />
-        </div>
-        <div class="form-group">
-          <label class="form-label">Kota</label>
-          <input class="form-control" id="cust-city" placeholder="Jakarta" />
-        </div>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Alamat</label>
-        <textarea class="form-control" id="cust-address" rows="2" placeholder="Alamat lengkap..."></textarea>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Catatan</label>
-        <textarea class="form-control" id="cust-notes" rows="2" placeholder="Catatan tambahan (opsional)..."></textarea>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" onclick="closeModal('modal-add-customer')">Batal</button>
-        <button type="submit" class="btn btn-primary"><i data-feather="save"></i> Simpan</button>
-      </div>
-    </form>
   </div>
 </div>
 
 <!-- Toast Container -->
 <div class="toast-container" id="toast-container"></div>
 
-<script src="js/app.js"></script>
+<!-- Lightbox untuk foto bukti -->
+<div id="lightbox" onclick="this.classList.remove('open')">
+  <img id="lightbox-img" src="" alt="Bukti Pengiriman" />
+</div>
+
+<script src="js/app.js?v=<?= time() ?>"></script>
 </body>
 </html>
