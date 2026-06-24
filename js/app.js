@@ -5,11 +5,6 @@
 // Global error handler — tangkap semua JS error
 window.onerror = (msg, src, line, col, err) => {
   console.error(`JS Error: ${msg} | ${src}:${line}:${col}`, err);
-  // Tampilkan error di halaman agar mudah debug
-  const div = document.createElement('div');
-  div.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#ef4444;color:white;padding:12px;z-index:99999;font-family:monospace;font-size:13px';
-  div.textContent = `JS Error: ${msg} @ line ${line}`;
-  document.body?.prepend(div);
 };
 window.onunhandledrejection = (e) => {
   console.error('Unhandled Promise:', e.reason);
@@ -46,12 +41,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.error('Init error:', e);
   }
 
-  navigate('dashboard');
-
-  // Sidebar nav
-  document.querySelectorAll('.nav-item[data-page]').forEach(el => {
-    el.addEventListener('click', () => navigate(el.dataset.page));
-  });
+  // Baca hash URL untuk navigasi langsung (misal dari order_baru.php#orders)
+  const hashPage = window.location.hash.replace('#', '');
+  const validPages = ['dashboard','monitoring','items','stock-mutation','order-input','orders','deliveries','machines','customers','products','reports'];
+  navigate(validPages.includes(hashPage) ? hashPage : 'dashboard');
 
   // Report date defaults
   const today = new Date().toISOString().slice(0,10);
@@ -180,10 +173,12 @@ const pageTitles = {
   monitoring:       ['Monitoring Realtime', 'Status mesin & order live'],
   items:            ['Bahan Baku', 'Kelola inventory material'],
   'stock-mutation': ['Mutasi Stok', 'Stok masuk & keluar'],
+  'order-input':    ['Input Order Baru', 'Isi data pelanggan & pesanan, nota langsung tercetak'],
   orders:           ['Order Cetak', 'Manajemen pesanan pelanggan'],
   deliveries:       ['Pengiriman', 'Monitoring pengiriman ke pelanggan'],
   machines:         ['Mesin', 'Status & log mesin'],
   customers:        ['Pelanggan', 'Riwayat pelanggan & order'],
+  products:         ['Produk & Harga', 'Daftar produk/jasa percetakan'],
   reports:          ['Laporan', 'Analisis & ekspor data'],
 };
 
@@ -213,10 +208,12 @@ function navigate(page) {
     case 'monitoring':     loadMonitoring(); startMonitorInterval(); break;
     case 'items':          loadItems(); break;
     case 'stock-mutation': loadStockMutationPage(); break;
+    case 'order-input':    loadOrderInputPage(); break;
     case 'orders':         loadOrders(); break;
     case 'deliveries':     loadDeliveries(); break;
     case 'machines':       loadMachinesPage(); break;
     case 'customers':      loadCustomers(); break;
+    case 'products':       loadProducts(); break;
   }
 
   feather.replace();
@@ -224,10 +221,11 @@ function navigate(page) {
 
 function openQuickAdd() {
   const map = {
-    items:      openAddItemModal,
-    orders:     () => window.location.href = 'order_baru.php',
-    deliveries: () => showToast('Pilih order yang sudah selesai untuk membuat pengiriman', 'info'),
-    customers:  () => window.location.href = 'order_baru.php',
+    items:         openAddItemModal,
+    'order-input': niSimpanOrder,
+    orders:        () => navigate('order-input'),
+    deliveries:    () => showToast('Pilih order yang sudah selesai untuk membuat pengiriman', 'info'),
+    customers:     () => navigate('order-input'),
   };
   if (map[currentPage]) map[currentPage]();
   else showToast('Pilih halaman yang sesuai untuk menambah data', 'info');
@@ -734,6 +732,426 @@ async function loadMutations() {
       <td style="color:var(--text-muted);font-size:12px">${t.user_name || '—'}</td>
     </tr>
   `).join('');
+}
+
+// ============================================================
+// PRODUCTS — Daftar Produk & Harga
+// ============================================================
+let allProducts = [];
+
+async function loadProducts() {
+  const data = await apiFetch(API + 'products.php?action=all');
+  allProducts = data?.data || [];
+  renderProductsTable(allProducts);
+  feather.replace();
+}
+
+function filterProducts() {
+  const q = document.getElementById('products-search').value.toLowerCase();
+  renderProductsTable(allProducts.filter(p =>
+    p.name.toLowerCase().includes(q) || p.code.toLowerCase().includes(q)
+  ));
+}
+
+function renderProductsTable(products) {
+  const tbody = document.getElementById('products-tbody');
+  if (!tbody) return;
+  if (!products.length) {
+    tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state">
+      <i data-feather="tag"></i><h3>Belum ada produk</h3>
+      <p>Tambahkan produk/jasa yang tersedia di percetakan ini.</p>
+    </div></td></tr>`;
+    feather.replace(); return;
+  }
+  tbody.innerHTML = products.map(p => `
+    <tr>
+      <td style="font-family:monospace;font-size:12px;color:var(--accent)">${p.code}</td>
+      <td style="font-weight:600">
+        ${p.name}
+        ${!p.is_active || p.is_active == '0'
+          ? '<span class="badge badge-cancelled" style="margin-left:8px;font-size:10px">Nonaktif</span>'
+          : ''}
+      </td>
+      <td style="color:var(--text-muted)">${p.category_name || '—'}</td>
+      <td style="color:var(--text-muted)">${p.unit_symbol   || '—'}</td>
+      <td style="font-weight:600;color:var(--success)">${formatCurrency(p.default_price)}</td>
+      <td style="color:var(--text-muted);font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+        ${p.description || '—'}
+      </td>
+      <td>
+        <div style="display:flex;gap:4px">
+          <button class="btn btn-secondary btn-sm btn-icon" onclick="openEditProductModal(${p.id})" title="Edit">
+            <i data-feather="edit-2"></i>
+          </button>
+          <button class="btn btn-danger btn-sm btn-icon" onclick="deleteProduct(${p.id})" title="Nonaktifkan">
+            <i data-feather="trash-2"></i>
+          </button>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+  feather.replace();
+}
+
+function openAddProductModal() {
+  if (!checkPermission('create')) return;
+  document.getElementById('modal-product-title').textContent = 'Tambah Produk';
+  document.getElementById('product-id').value    = '';
+  document.getElementById('product-name').value  = '';
+  document.getElementById('product-price').value = '';
+  document.getElementById('product-desc').value  = '';
+  document.getElementById('product-category').value = '';
+  document.getElementById('product-unit').value  = '';
+  document.getElementById('product-active-wrap').style.display = 'none';
+
+  // Isi dropdown kategori & unit
+  const catSel = document.getElementById('product-category');
+  catSel.innerHTML = '<option value="">-- Pilih Kategori --</option>';
+  refCategories.forEach(c => catSel.innerHTML += `<option value="${c.id}">${c.name}</option>`);
+  const unitSel = document.getElementById('product-unit');
+  unitSel.innerHTML = '<option value="">-- Pilih Satuan --</option>';
+  refUnits.forEach(u => unitSel.innerHTML += `<option value="${u.id}">${u.name} (${u.symbol})</option>`);
+
+  openModal('modal-add-product');
+  feather.replace();
+}
+
+async function openEditProductModal(id) {
+  if (!checkPermission('edit')) return;
+  const data = await apiFetch(`${API}products.php?action=get&id=${id}`);
+  const p = data?.data;
+  if (!p) { showToast('Gagal memuat data produk', 'error'); return; }
+
+  document.getElementById('modal-product-title').textContent = 'Edit Produk';
+  document.getElementById('product-id').value    = p.id;
+  document.getElementById('product-name').value  = p.name;
+  document.getElementById('product-price').value = parseFloat(p.default_price);
+  document.getElementById('product-desc').value  = p.description || '';
+  document.getElementById('product-active-wrap').style.display = 'block';
+  document.getElementById('product-active').checked = p.is_active == 1;
+
+  // Isi dropdown
+  const catSel = document.getElementById('product-category');
+  catSel.innerHTML = '<option value="">-- Pilih Kategori --</option>';
+  refCategories.forEach(c => catSel.innerHTML += `<option value="${c.id}">${c.name}</option>`);
+  catSel.value = p.category_id || '';
+
+  const unitSel = document.getElementById('product-unit');
+  unitSel.innerHTML = '<option value="">-- Pilih Satuan --</option>';
+  refUnits.forEach(u => unitSel.innerHTML += `<option value="${u.id}">${u.name} (${u.symbol})</option>`);
+  unitSel.value = p.unit_id || '';
+
+  openModal('modal-add-product');
+  feather.replace();
+}
+
+async function submitProduct(e) {
+  e.preventDefault();
+  const id     = document.getElementById('product-id').value;
+  const isEdit = id !== '';
+  if (!checkPermission(isEdit ? 'edit' : 'create')) return;
+
+  const payload = {
+    name:          document.getElementById('product-name').value,
+    default_price: document.getElementById('product-price').value,
+    category_id:   document.getElementById('product-category').value || null,
+    unit_id:       document.getElementById('product-unit').value     || null,
+    description:   document.getElementById('product-desc').value,
+    is_active:     document.getElementById('product-active').checked ? 1 : 0,
+  };
+
+  let res;
+  if (isEdit) { payload.id = id; res = await apiPut(`${API}products.php`, payload); }
+  else        { res = await apiPost(`${API}products.php`, payload); }
+
+  if (res?.success) {
+    showToast(isEdit ? 'Produk diupdate' : 'Produk ditambahkan', 'success');
+    closeModal('modal-add-product');
+    loadProducts();
+  } else {
+    showToast(res?.message || 'Gagal menyimpan produk', 'error');
+  }
+}
+
+async function deleteProduct(id) {
+  if (!checkPermission('delete')) return;
+  if (!confirm('Nonaktifkan produk ini?')) return;
+  const res = await apiFetch(`${API}products.php?id=${id}`, { method: 'DELETE' });
+  if (res?.success) { showToast('Produk dinonaktifkan', 'success'); loadProducts(); }
+  else showToast('Gagal', 'error');
+}
+
+// ============================================================
+// ORDER INPUT PAGE — inline di index.php
+// ============================================================
+let niSearchTimeout = null;
+
+async function loadOrderInputPage() {
+  // Set default due date = 7 hari dari sekarang
+  const due = document.getElementById('ni-due');
+  if (due && !due.value) {
+    const d = new Date(); d.setDate(d.getDate() + 7);
+    due.value = d.toISOString().slice(0, 10);
+  }
+
+  // Load mesin & operator kalau belum ada
+  const machSel = document.getElementById('ni-machine');
+  if (machSel && machSel.options.length <= 1) {
+    const [machs, ops] = await Promise.all([
+      apiFetch('api/machines.php?action=list'),
+      apiFetch('api/dashboard.php?action=operators'),
+    ]);
+    (machs?.data || []).forEach(m => {
+      machSel.innerHTML += `<option value="${m.id}">${m.name}</option>`;
+    });
+    const opSel = document.getElementById('ni-operator');
+    (ops?.data || []).forEach(o => {
+      opSel.innerHTML += `<option value="${o.id}">${o.name}</option>`;
+    });
+  }
+
+  // Load produk ke dropdown kalau belum ada
+  const prodSel = document.getElementById('ni-product-select');
+  if (prodSel && prodSel.options.length <= 1) {
+    // Gunakan cache allProducts kalau sudah ada, kalau belum fetch
+    if (!allProducts.length) {
+      const dp = await apiFetch('api/products.php?action=list');
+      allProducts = dp?.data || [];
+    }
+    if (allProducts.length) {
+      // Kelompokkan per kategori
+      const grouped = {};
+      allProducts.forEach(p => {
+        const cat = p.category_name || 'Lainnya';
+        if (!grouped[cat]) grouped[cat] = [];
+        grouped[cat].push(p);
+      });
+      Object.entries(grouped).forEach(([cat, items]) => {
+        const og = document.createElement('optgroup');
+        og.label = cat;
+        items.forEach(p => {
+          const opt = document.createElement('option');
+          opt.value = p.id;
+          opt.textContent = `${p.name} — ${formatCurrency(p.default_price)}${p.unit_symbol ? ' / ' + p.unit_symbol : ''}`;
+          opt.dataset.price = p.default_price;
+          opt.dataset.name  = p.name;
+          opt.dataset.desc  = p.description || '';
+          og.appendChild(opt);
+        });
+        prodSel.appendChild(og);
+      });
+    }
+  }
+
+  niHitungTotal();
+  feather.replace();
+
+  // Tutup dropdown saat klik di luar
+  document.addEventListener('click', e => {
+    if (!e.target.closest('#ni-cust-search') && !e.target.closest('#ni-cust-dropdown')) {
+      const dd = document.getElementById('ni-cust-dropdown');
+      if (dd) dd.style.display = 'none';
+    }
+  }, { once: false });
+}
+
+// ---- Autocomplete pelanggan ----
+function niSearchCustomer(q) {
+  clearTimeout(niSearchTimeout);
+  const dd = document.getElementById('ni-cust-dropdown');
+  if (q.length < 2) { dd.style.display = 'none'; return; }
+  niSearchTimeout = setTimeout(async () => {
+    const r    = await apiFetch(`api/customers.php?action=search&q=${encodeURIComponent(q)}`);
+    const list = r?.data || [];
+    if (!list.length) { dd.style.display = 'none'; return; }
+    dd.innerHTML = list.map(c => `
+      <div onclick="niPilihPelanggan(${c.id},'${niEsc(c.name)}','${niEsc(c.phone)}','${niEsc(c.city||'')}','${niEsc(c.address||'')}')"
+        style="padding:10px 14px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center"
+        onmouseover="this.style.background='var(--bg-card-hover)'"
+        onmouseout="this.style.background=''">
+        <div>
+          <div style="font-weight:600;color:var(--text-primary)">${c.name}</div>
+          <div style="font-size:11px;color:var(--text-muted)">${c.phone}${c.city ? ' · ' + c.city : ''}</div>
+        </div>
+        <div style="font-size:11px;color:var(--accent)">${c.total_orders} order</div>
+      </div>`).join('');
+    dd.style.display = 'block';
+  }, 300);
+}
+
+function niPilihPelanggan(id, name, phone, city, address) {
+  document.getElementById('ni-cust-name').value    = name;
+  document.getElementById('ni-cust-phone').value   = phone;
+  document.getElementById('ni-cust-city').value    = city;
+  document.getElementById('ni-cust-address').value = address;
+  document.getElementById('ni-cust-search').value  = name;
+  document.getElementById('ni-cust-dropdown').style.display = 'none';
+  showToast('Pelanggan dipilih: ' + name, 'success');
+}
+
+function niEsc(s) {
+  return String(s).replace(/'/g, "\\'").replace(/\n/g, '');
+}
+
+// ---- Pilih produk dari dropdown → isi form ----
+function niPilihProduk(productId) {
+  if (!productId) return;
+  const sel = document.getElementById('ni-product-select');
+  const opt = sel.querySelector(`option[value="${productId}"]`);
+  if (!opt) return;
+
+  // Isi judul & harga dari produk
+  const titleEl = document.getElementById('ni-title');
+  const priceEl = document.getElementById('ni-price');
+  const descEl  = document.getElementById('ni-desc');
+
+  if (titleEl) titleEl.value = opt.dataset.name  || '';
+  if (priceEl) priceEl.value = opt.dataset.price  || 0;
+  if (descEl && !descEl.value) descEl.value = opt.dataset.desc || '';
+
+  niHitungTotal();
+  showToast(`Produk "${opt.dataset.name}" dipilih — harga bisa diubah`, 'info');
+}
+
+// ---- Hitung total ----
+function niHitungTotal() {
+  const qty  = parseFloat(document.getElementById('ni-qty')?.value)      || 0;
+  const price= parseFloat(document.getElementById('ni-price')?.value)    || 0;
+  const disc = parseFloat(document.getElementById('ni-discount')?.value) || 0;
+  const tax  = parseFloat(document.getElementById('ni-tax')?.value)      || 0;
+  const sub  = qty * price;
+  const taxAmt = (sub - disc) * (tax / 100);
+  const total  = sub - disc + taxAmt;
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  set('ni-c-subtotal', formatCurrency(sub));
+  set('ni-c-discount', '- ' + formatCurrency(disc));
+  set('ni-c-tax',      '+ ' + formatCurrency(taxAmt));
+  set('ni-c-total',    formatCurrency(total));
+}
+
+// ---- Simpan order ----
+async function niSimpanOrder() {
+  if (!checkPermission('create')) return;
+
+  const name  = document.getElementById('ni-cust-name').value.trim();
+  const phone = document.getElementById('ni-cust-phone').value.trim();
+  const title = document.getElementById('ni-title').value.trim();
+  const qty   = parseFloat(document.getElementById('ni-qty').value)   || 0;
+  const price = parseFloat(document.getElementById('ni-price').value) || 0;
+  const due   = document.getElementById('ni-due').value;
+
+  if (!name)   { showToast('Nama pelanggan wajib diisi', 'warning'); return; }
+  if (!phone)  { showToast('No. HP pelanggan wajib diisi', 'warning'); return; }
+  if (!title)  { showToast('Judul pesanan wajib diisi', 'warning'); return; }
+  if (qty < 1) { showToast('Jumlah minimal 1', 'warning'); return; }
+  if (price < 1){ showToast('Harga satuan wajib diisi', 'warning'); return; }
+  if (!due)    { showToast('Jatuh tempo wajib diisi', 'warning'); return; }
+
+  const btn = document.getElementById('ni-btn-simpan');
+  btn.disabled = true;
+  btn.innerHTML = '<i data-feather="refresh-cw"></i> Menyimpan...';
+  feather.replace();
+
+  const payload = {
+    customer_name:    name,
+    customer_phone:   phone,
+    customer_city:    document.getElementById('ni-cust-city').value,
+    customer_address: document.getElementById('ni-cust-address').value,
+    title,
+    description:  document.getElementById('ni-desc').value,
+    quantity:     qty,
+    unit_price:   price,
+    discount:     parseFloat(document.getElementById('ni-discount').value) || 0,
+    tax:          parseFloat(document.getElementById('ni-tax').value)      || 11,
+    machine_id:   document.getElementById('ni-machine').value  || null,
+    operator_id:  document.getElementById('ni-operator').value || null,
+    priority:     document.getElementById('ni-priority').value,
+    due_date:     due,
+    notes:        document.getElementById('ni-notes').value,
+  };
+
+  const res = await apiPost('api/orders.php?action=create_with_customer', payload);
+
+  btn.disabled = false;
+  btn.innerHTML = '<i data-feather="save"></i> Simpan & Tampilkan Nota';
+  feather.replace();
+
+  if (res?.success) {
+    showToast('Order ' + res.order_number + ' berhasil disimpan!', 'success');
+    niTampilkanNota(res.data, res.order_number);
+  } else {
+    showToast(res?.message || 'Gagal menyimpan order', 'error');
+  }
+}
+
+// ---- Tampilkan Nota ----
+function niTampilkanNota(o, orderNum) {
+  const qty   = parseFloat(o.quantity)   || 0;
+  const price = parseFloat(o.unit_price) || 0;
+  const disc  = parseFloat(o.discount)   || 0;
+  const tax   = parseFloat(o.tax)        || 0;
+  const sub   = qty * price;
+  const taxAmt= (sub - disc) * (tax / 100);
+  const total = sub - disc + taxAmt;
+
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  set('ni-nota-num',       orderNum);
+  set('ni-nota-num2',      orderNum);
+  set('ni-nota-tgl',       'Tanggal: ' + formatDate(new Date().toISOString()));
+  set('ni-nota-cust-name', o.customer_name);
+  set('ni-nota-cust-phone',o.customer_phone || '—');
+  set('ni-nota-cust-city', o.customer_city  || '—');
+  set('ni-nota-title',     o.title);
+  set('ni-nota-qty',       qty + ' pcs');
+  set('ni-nota-price',     formatCurrency(price));
+  set('ni-nota-subtotal',  formatCurrency(sub));
+  set('ni-nota-disc',      '- ' + formatCurrency(disc));
+  set('ni-nota-tax',       '+ ' + formatCurrency(taxAmt));
+  set('ni-nota-total',     formatCurrency(total));
+  set('ni-nota-due',       formatDate(o.due_date));
+  set('ni-nota-priority',  {'low':'Rendah','normal':'Normal','high':'Tinggi','urgent':'URGENT'}[o.priority] || o.priority);
+
+  document.getElementById('ni-nota-placeholder').style.display = 'none';
+  document.getElementById('ni-nota-content').style.display     = 'block';
+  feather.replace();
+
+  // Scroll ke nota di layar kecil
+  if (window.innerWidth < 900) {
+    document.getElementById('ni-nota-content').scrollIntoView({behavior:'smooth'});
+  }
+}
+
+function niResetForm() {
+  ['ni-cust-name','ni-cust-phone','ni-cust-city','ni-cust-address',
+   'ni-cust-search','ni-title','ni-desc','ni-notes'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  ['ni-qty','ni-price','ni-discount','ni-tax'].forEach((id, i) => {
+    const el = document.getElementById(id);
+    if (el) el.value = [1,0,0,11][i];
+  });
+  const machSel = document.getElementById('ni-machine');
+  if (machSel) machSel.value = '';
+  const opSel = document.getElementById('ni-operator');
+  if (opSel) opSel.value = '';
+  const prioSel = document.getElementById('ni-priority');
+  if (prioSel) prioSel.value = 'normal';
+  const prodSel = document.getElementById('ni-product-select');
+  if (prodSel) prodSel.value = '';
+
+  // Reset due date
+  const due = document.getElementById('ni-due');
+  if (due) { const d = new Date(); d.setDate(d.getDate()+7); due.value = d.toISOString().slice(0,10); }
+
+  // Reset nota
+  const ph = document.getElementById('ni-nota-placeholder');
+  const ct = document.getElementById('ni-nota-content');
+  if (ph) ph.style.display = 'block';
+  if (ct) ct.style.display = 'none';
+
+  niHitungTotal();
+  window.scrollTo({top:0, behavior:'smooth'});
 }
 
 // ============================================================

@@ -16,38 +16,26 @@ $userInfo = getUserInfo();
   <style>
     /* ---- Print styles ---- */
     @media print {
-      .no-print { display: none !important; }
-      .print-only { display: block !important; }
+      .sidebar, .header, .no-print { display: none !important; }
+      .main-wrapper { margin-left: 0 !important; }
       body { background: white !important; color: #000 !important; }
-      .nota-wrap { box-shadow: none !important; border: 1px solid #ccc !important; }
+      .nota-wrap.card {
+        background: #fff !important; border: 1px solid #ccc !important;
+        box-shadow: none !important; color: #000 !important;
+      }
+      .nota-wrap * { color: #000 !important; border-color: #ccc !important; background: transparent !important; }
+      .form-nota-grid > div:first-child { display: none !important; }
+      .form-nota-grid { display: block !important; }
+      #nota-wrapper { width: 100% !important; max-width: 82mm !important; margin: 0 auto !important; }
     }
     .print-only { display: none; }
-
-    /* ---- Layout ---- */
-    .page-wrap {
-      max-width: 1100px; margin: 0 auto; padding: 28px 20px 60px;
-    }
-    .top-nav {
-      background: var(--bg-surface);
-      border-bottom: 1px solid var(--border);
-      padding: 0 28px; height: 60px;
-      display: flex; align-items: center; justify-content: space-between;
-    }
-    .top-nav-logo { display: flex; align-items: center; gap: 10px; }
-    .top-nav-logo .logo-icon {
-      width: 32px; height: 32px;
-      background: linear-gradient(135deg, #6366f1, #8b5cf6);
-      border-radius: 8px; display: flex; align-items: center;
-      justify-content: center; font-size: 16px;
-    }
-    .top-nav-logo .logo-name { font-size: 15px; font-weight: 700; }
-    .top-nav-logo .logo-name span { color: #a5b4fc; font-size: 11px; display: block; }
 
     /* ---- Two column layout ---- */
     .form-nota-grid {
       display: grid;
       grid-template-columns: 1fr 420px;
-      gap: 24px; align-items: start;
+      gap: 24px;
+      align-items: start;
     }
     @media (max-width: 900px) {
       .form-nota-grid { grid-template-columns: 1fr; }
@@ -65,40 +53,104 @@ $userInfo = getUserInfo();
   </style>
 </head>
 <body>
+<div class="app-layout">
 
-<!-- Top Nav -->
-<div class="top-nav no-print">
-  <div class="top-nav-logo">
-    <div class="logo-icon">🖨️</div>
-    <div class="logo-name">PrintTrack <span>Input Order Baru</span></div>
-  </div>
-  <div style="display:flex;align-items:center;gap:10px">
-    <a href="index.php" class="btn btn-secondary btn-sm">
-      <i data-feather="arrow-left"></i> Kembali
-    </a>
-    <span style="font-size:12px;color:var(--text-muted)"><?= htmlspecialchars($userInfo['name']) ?> · <?= ucfirst($userRole) ?></span>
-  </div>
-</div>
-
-<div class="page-wrap">
-  <div style="margin-bottom:24px" class="no-print">
-    <div style="font-size:22px;font-weight:800">Input Order & Cetak Nota</div>
-    <div style="font-size:13px;color:var(--text-muted);margin-top:4px">
-      Isi data pelanggan dan detail pesanan. Nota akan tampil otomatis setelah order disimpan.
+  <!-- ========== SIDEBAR ========== -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-icon">🖨️</div>
+      <div class="logo-text">
+        PrintTrack
+        <span>Inventory & Monitoring</span>
+      </div>
     </div>
-  </div>
+    <nav class="sidebar-nav">
+      <div class="nav-group">
+        <div class="nav-group-label">Utama</div>
+        <div class="nav-item" onclick="location.href='index.php#dashboard'">
+          <i data-feather="grid"></i> Dashboard
+        </div>
+        <div class="nav-item" onclick="location.href='index.php#monitoring'">
+          <i data-feather="activity"></i> Monitoring Realtime
+        </div>
+      </div>
+      <div class="nav-group">
+        <div class="nav-group-label">Inventory</div>
+        <div class="nav-item" onclick="location.href='index.php#items'">
+          <i data-feather="package"></i> Bahan Baku
+        </div>
+        <div class="nav-item" onclick="location.href='index.php#stock-mutation'">
+          <i data-feather="repeat"></i> Mutasi Stok
+        </div>
+      </div>
+      <div class="nav-group">
+        <div class="nav-group-label">Produksi</div>
+        <div class="nav-item active">
+          <i data-feather="plus-circle"></i> Input Order Baru
+        </div>
+        <div class="nav-item" onclick="location.href='index.php#orders'">
+          <i data-feather="file-text"></i> Order Cetak
+        </div>
+        <div class="nav-item" onclick="location.href='index.php#deliveries'">
+          <i data-feather="truck"></i> Pengiriman
+        </div>
+        <div class="nav-item" onclick="location.href='index.php#machines'">
+          <i data-feather="cpu"></i> Mesin
+        </div>
+        <div class="nav-item" onclick="location.href='index.php#customers'">
+          <i data-feather="users"></i> Pelanggan
+        </div>
+      </div>
+      <div class="nav-group">
+        <div class="nav-group-label">Laporan</div>
+        <div class="nav-item" onclick="location.href='index.php#reports'">
+          <i data-feather="bar-chart-2"></i> Laporan
+        </div>
+      </div>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-card">
+        <div class="user-avatar"><?= strtoupper(substr($userInfo['name'], 0, 1)) ?></div>
+        <div class="user-info">
+          <div class="user-name"><?= htmlspecialchars($userInfo['name']) ?></div>
+          <div class="user-role"><?= ucfirst($userRole) ?></div>
+        </div>
+      </div>
+      <a href="logout.php" class="btn btn-secondary btn-sm" style="margin-top:12px;width:100%;text-align:center;text-decoration:none">
+        <i data-feather="log-out"></i> Logout
+      </a>
+    </div>
+  </aside>
 
-  <div class="form-nota-grid">
-    <!-- ====== KOLOM KIRI: FORM ====== -->
-    <div class="no-print">
+  <!-- ========== MAIN ========== -->
+  <div class="main-wrapper">
+    <header class="header no-print">
+      <div class="header-title">
+        Input Order Baru <span>Isi data pelanggan & pesanan, nota langsung tercetak</span>
+      </div>
+      <div class="header-actions">
+        <a href="track.php" target="_blank" class="btn btn-secondary btn-sm">
+          <i data-feather="external-link"></i> Halaman Tracking
+        </a>
+        <a href="index.php" class="btn btn-secondary btn-sm">
+          <i data-feather="arrow-left"></i> Kembali
+        </a>
+      </div>
+    </header>
 
-      <!-- Data Pelanggan -->
-      <div class="card" style="margin-bottom:20px">
-        <div class="section-title"><i data-feather="user"></i> Data Pelanggan</div>
+    <main class="page-content">
 
-        <!-- Autocomplete search -->
-        <div class="form-group" style="position:relative">
-          <label class="form-label">Cari Pelanggan Lama (opsional)</label>
+      <div class="form-nota-grid">
+        <!-- ====== KOLOM KIRI: FORM ====== -->
+        <div class="no-print">
+
+          <!-- Data Pelanggan -->
+          <div class="card" style="margin-bottom:20px">
+            <div class="section-title"><i data-feather="user"></i> Data Pelanggan</div>
+
+            <!-- Autocomplete search -->
+            <div class="form-group" style="position:relative">
+              <label class="form-label">Cari Pelanggan Lama (opsional)</label>
           <div class="search-box" style="margin-bottom:0">
             <i data-feather="search"></i>
             <input type="text" id="cust-search" placeholder="Ketik nama atau no. HP..."
@@ -391,7 +443,10 @@ $userInfo = getUserInfo();
     </div><!-- /nota-wrapper -->
 
   </div><!-- /form-nota-grid -->
-</div><!-- /page-wrap -->
+
+    </main>
+  </div><!-- /.main-wrapper -->
+</div><!-- /.app-layout -->
 
 <div class="toast-container" id="toast-container"></div>
 

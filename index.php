@@ -89,10 +89,10 @@ $userInfo = getUserInfo();
     <nav class="sidebar-nav">
       <div class="nav-group">
         <div class="nav-group-label">Utama</div>
-        <div class="nav-item active" data-page="dashboard">
+        <div class="nav-item active" data-page="dashboard" onclick="navigate('dashboard')">
           <i data-feather="grid"></i> Dashboard
         </div>
-        <div class="nav-item" data-page="monitoring">
+        <div class="nav-item" data-page="monitoring" onclick="navigate('monitoring')">
           <i data-feather="activity"></i> Monitoring Realtime
           <span class="nav-badge" id="badge-active">0</span>
         </div>
@@ -100,38 +100,41 @@ $userInfo = getUserInfo();
 
       <div class="nav-group">
         <div class="nav-group-label">Inventory</div>
-        <div class="nav-item" data-page="items">
+        <div class="nav-item" data-page="items" onclick="navigate('items')">
           <i data-feather="package"></i> Bahan Baku
           <span class="nav-badge" id="badge-lowstock" style="display:none">!</span>
         </div>
-        <div class="nav-item" data-page="stock-mutation">
+        <div class="nav-item" data-page="stock-mutation" onclick="navigate('stock-mutation')">
           <i data-feather="repeat"></i> Mutasi Stok
         </div>
       </div>
 
       <div class="nav-group">
         <div class="nav-group-label">Produksi</div>
-        <div class="nav-item" onclick="window.location.href='order_baru.php'" style="cursor:pointer">
+        <div class="nav-item" data-page="order-input" onclick="navigate('order-input')">
           <i data-feather="plus-circle"></i> Input Order Baru
         </div>
-        <div class="nav-item" data-page="orders">
+        <div class="nav-item" data-page="orders" onclick="navigate('orders')">
           <i data-feather="file-text"></i> Order Cetak
         </div>
-        <div class="nav-item" data-page="deliveries">
+        <div class="nav-item" data-page="deliveries" onclick="navigate('deliveries')">
           <i data-feather="truck"></i> Pengiriman
           <span class="nav-badge" id="badge-deliveries" style="display:none">0</span>
         </div>
-        <div class="nav-item" data-page="machines">
+        <div class="nav-item" data-page="machines" onclick="navigate('machines')">
           <i data-feather="cpu"></i> Mesin
         </div>
-        <div class="nav-item" data-page="customers">
+        <div class="nav-item" data-page="customers" onclick="navigate('customers')">
           <i data-feather="users"></i> Pelanggan
+        </div>
+        <div class="nav-item" data-page="products" onclick="navigate('products')">
+          <i data-feather="tag"></i> Produk & Harga
         </div>
       </div>
 
       <div class="nav-group">
         <div class="nav-group-label">Laporan</div>
-        <div class="nav-item" data-page="reports">
+        <div class="nav-item" data-page="reports" onclick="navigate('reports')">
           <i data-feather="bar-chart-2"></i> Laporan
         </div>
       </div>
@@ -442,6 +445,245 @@ $userInfo = getUserInfo();
         </div>
       </div>
 
+      <!-- ========== ORDER INPUT PAGE ========== -->
+      <div class="page" id="page-order-input">
+        <!-- Two-column: form kiri, nota kanan -->
+        <div style="display:grid;grid-template-columns:1fr 400px;gap:24px;align-items:start" id="order-input-grid">
+
+          <!-- KOLOM KIRI: FORM -->
+          <div>
+            <!-- Data Pelanggan -->
+            <div class="card" style="margin-bottom:20px">
+              <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
+                <i data-feather="user"></i> Data Pelanggan
+              </div>
+              <div class="form-group" style="position:relative">
+                <label class="form-label">Cari Pelanggan Lama (opsional)</label>
+                <div class="search-box" style="margin-bottom:0">
+                  <i data-feather="search"></i>
+                  <input type="text" id="ni-cust-search" placeholder="Ketik nama atau no. HP..."
+                    oninput="niSearchCustomer(this.value)" autocomplete="off" />
+                </div>
+                <div id="ni-cust-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:200;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-sm);max-height:200px;overflow-y:auto;box-shadow:var(--shadow);margin-top:4px"></div>
+              </div>
+              <div class="divider"></div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">Nama Pelanggan *</label>
+                  <input class="form-control" id="ni-cust-name" placeholder="Budi Santoso" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label">No. HP *</label>
+                  <input class="form-control" id="ni-cust-phone" placeholder="0812-3456-7890" />
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">Kota</label>
+                  <input class="form-control" id="ni-cust-city" placeholder="Jakarta" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Alamat</label>
+                  <input class="form-control" id="ni-cust-address" placeholder="Jl. Merdeka No. 1..." />
+                </div>
+              </div>
+            </div>
+
+            <!-- Detail Pesanan -->
+            <div class="card" style="margin-bottom:20px">
+              <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
+                <i data-feather="file-text"></i> Detail Pesanan
+              </div>
+              <!-- Pilih dari daftar produk -->
+              <div class="form-group">
+                <label class="form-label">Pilih Produk (opsional)</label>
+                <select class="form-control" id="ni-product-select" onchange="niPilihProduk(this.value)">
+                  <option value="">-- Pilih produk untuk isi otomatis --</option>
+                </select>
+                <div style="font-size:11px;color:var(--text-muted);margin-top:4px">
+                  Memilih produk akan mengisi judul & harga otomatis. Harga tetap bisa diubah.
+                </div>
+              </div>
+              <div class="divider"></div>
+              <div class="form-group">
+                <label class="form-label">Jenis / Judul Pekerjaan *</label>
+                <input class="form-control" id="ni-title" placeholder="Contoh: Cetak Spanduk 3x1m Full Color" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Spesifikasi / Keterangan</label>
+                <textarea class="form-control" id="ni-desc" rows="2" placeholder="Bahan, finishing, warna, dll..."></textarea>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">Jumlah *</label>
+                  <input type="number" class="form-control" id="ni-qty" min="1" value="1" oninput="niHitungTotal()" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Harga Satuan (Rp) *</label>
+                  <input type="number" class="form-control" id="ni-price" min="0" value="0" oninput="niHitungTotal()" />
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">Diskon (Rp)</label>
+                  <input type="number" class="form-control" id="ni-discount" min="0" value="0" oninput="niHitungTotal()" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label">PPN (%)</label>
+                  <input type="number" class="form-control" id="ni-tax" min="0" max="100" value="11" oninput="niHitungTotal()" />
+                </div>
+              </div>
+              <!-- Kalkulasi -->
+              <div style="background:var(--bg-base);border-radius:var(--radius-sm);padding:14px;margin-bottom:16px">
+                <div class="flex justify-between mb-4" style="font-size:13px">
+                  <span style="color:var(--text-muted)">Subtotal</span>
+                  <span id="ni-c-subtotal" style="font-weight:600">Rp 0</span>
+                </div>
+                <div class="flex justify-between mb-4" style="font-size:13px">
+                  <span style="color:var(--text-muted)">Diskon</span>
+                  <span id="ni-c-discount" style="color:var(--danger)">- Rp 0</span>
+                </div>
+                <div class="flex justify-between mb-4" style="font-size:13px">
+                  <span style="color:var(--text-muted)">PPN</span>
+                  <span id="ni-c-tax">+ Rp 0</span>
+                </div>
+                <div class="divider"></div>
+                <div class="flex justify-between">
+                  <span style="font-weight:700;font-size:15px">TOTAL</span>
+                  <span id="ni-c-total" style="font-weight:800;font-size:20px;color:var(--accent)">Rp 0</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Produksi -->
+            <div class="card" style="margin-bottom:20px">
+              <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
+                <i data-feather="cpu"></i> Produksi
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">Mesin</label>
+                  <select class="form-control" id="ni-machine">
+                    <option value="">-- Pilih Mesin --</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Operator</label>
+                  <select class="form-control" id="ni-operator">
+                    <option value="">-- Pilih Operator --</option>
+                  </select>
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">Prioritas</label>
+                  <select class="form-control" id="ni-priority">
+                    <option value="low">Rendah</option>
+                    <option value="normal" selected>Normal</option>
+                    <option value="high">Tinggi</option>
+                    <option value="urgent">Urgent</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Jatuh Tempo *</label>
+                  <input type="date" class="form-control" id="ni-due" />
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Catatan</label>
+                <textarea class="form-control" id="ni-notes" rows="2" placeholder="Instruksi khusus..."></textarea>
+              </div>
+            </div>
+
+            <div style="display:flex;gap:12px">
+              <button class="btn btn-primary" style="flex:1;justify-content:center;padding:12px"
+                onclick="niSimpanOrder()" id="ni-btn-simpan">
+                <i data-feather="save"></i> Simpan & Tampilkan Nota
+              </button>
+              <button class="btn btn-secondary" onclick="niResetForm()" style="padding:12px 20px">
+                <i data-feather="refresh-cw"></i> Reset
+              </button>
+            </div>
+          </div>
+
+          <!-- KOLOM KANAN: NOTA -->
+          <div id="ni-nota-wrapper">
+            <div id="ni-nota-placeholder" class="card" style="text-align:center;padding:48px 24px;position:sticky;top:90px">
+              <i data-feather="printer" style="width:48px;height:48px;stroke:var(--text-muted);margin-bottom:16px"></i>
+              <div style="font-size:15px;font-weight:600;color:var(--text-secondary);margin-bottom:8px">Nota Belum Tersedia</div>
+              <div style="font-size:13px;color:var(--text-muted)">Isi form & klik "Simpan" untuk generate nota otomatis</div>
+            </div>
+
+            <div id="ni-nota-content" style="display:none;position:sticky;top:90px">
+              <div class="card" id="ni-nota-print" style="padding:24px;font-size:13px">
+                <div style="text-align:center;border-bottom:2px solid var(--border);padding-bottom:14px;margin-bottom:14px">
+                  <div style="font-size:18px;font-weight:800;color:var(--primary)">🖨️ PrintTrack</div>
+                  <div style="font-size:11px;color:var(--text-muted)">Sistem Inventory & Monitoring Percetakan</div>
+                </div>
+                <div style="text-align:center;margin-bottom:16px">
+                  <div style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px">NOTA PESANAN</div>
+                  <div id="ni-nota-num" style="font-size:24px;font-weight:800;font-family:monospace;color:var(--accent);margin-top:4px"></div>
+                  <div id="ni-nota-tgl" style="font-size:11px;color:var(--text-muted);margin-top:2px"></div>
+                </div>
+                <div style="background:var(--bg-base);border-radius:var(--radius-sm);padding:12px;margin-bottom:12px">
+                  <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px">Data Pelanggan</div>
+                  <table style="width:100%;font-size:12px;border-collapse:collapse">
+                    <tr><td style="color:var(--text-muted);width:80px;padding:2px 0">Nama</td><td style="font-weight:600">: <span id="ni-nota-cust-name"></span></td></tr>
+                    <tr><td style="color:var(--text-muted);padding:2px 0">No. HP</td><td>: <span id="ni-nota-cust-phone"></span></td></tr>
+                    <tr><td style="color:var(--text-muted);padding:2px 0">Kota</td><td>: <span id="ni-nota-cust-city"></span></td></tr>
+                  </table>
+                </div>
+                <div style="margin-bottom:12px">
+                  <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px">Detail Pesanan</div>
+                  <table style="width:100%;font-size:12px;border-collapse:collapse">
+                    <tr><td style="color:var(--text-muted);width:80px;padding:2px 0">Pesanan</td><td style="font-weight:600">: <span id="ni-nota-title"></span></td></tr>
+                    <tr><td style="color:var(--text-muted);padding:2px 0">Jumlah</td><td>: <span id="ni-nota-qty"></span></td></tr>
+                    <tr><td style="color:var(--text-muted);padding:2px 0">Harga/pcs</td><td>: <span id="ni-nota-price"></span></td></tr>
+                  </table>
+                </div>
+                <div style="border-top:1px dashed var(--border);padding-top:10px;margin-bottom:12px">
+                  <div class="flex justify-between" style="font-size:12px;margin-bottom:4px"><span style="color:var(--text-muted)">Subtotal</span><span id="ni-nota-subtotal"></span></div>
+                  <div class="flex justify-between" style="font-size:12px;margin-bottom:4px"><span style="color:var(--text-muted)">Diskon</span><span id="ni-nota-disc" style="color:var(--danger)"></span></div>
+                  <div class="flex justify-between" style="font-size:12px;margin-bottom:8px"><span style="color:var(--text-muted)">PPN</span><span id="ni-nota-tax"></span></div>
+                  <div class="flex justify-between" style="font-size:15px;font-weight:800;border-top:2px solid var(--border);padding-top:8px">
+                    <span>TOTAL</span><span id="ni-nota-total" style="color:var(--success)"></span>
+                  </div>
+                </div>
+                <div style="background:var(--bg-base);border-radius:var(--radius-sm);padding:10px;margin-bottom:12px;font-size:11px">
+                  <div class="flex justify-between" style="margin-bottom:3px"><span style="color:var(--text-muted)">Jatuh Tempo</span><span id="ni-nota-due" style="font-weight:600"></span></div>
+                  <div class="flex justify-between"><span style="color:var(--text-muted)">Prioritas</span><span id="ni-nota-priority"></span></div>
+                </div>
+                <div style="border:1px dashed rgba(99,102,241,0.4);border-radius:var(--radius-sm);padding:10px;text-align:center;margin-bottom:16px">
+                  <div style="font-size:10px;color:var(--text-muted);margin-bottom:3px">Cek status pesanan di:</div>
+                  <div style="font-size:11px;font-weight:600;color:var(--accent)">localhost/inventory_monitoring/track.php</div>
+                  <div style="font-size:10px;color:var(--text-muted);margin-top:3px">Nomor Order:</div>
+                  <div id="ni-nota-num2" style="font-size:15px;font-weight:800;font-family:monospace;color:var(--primary);margin-top:2px"></div>
+                </div>
+                <div style="display:flex;justify-content:space-between;font-size:11px">
+                  <div style="text-align:center">
+                    <div style="color:var(--text-muted);margin-bottom:30px">Kasir</div>
+                    <div style="border-top:1px solid var(--border);padding-top:4px;min-width:90px">(<?= htmlspecialchars($_SESSION['user_name']) ?>)</div>
+                  </div>
+                  <div style="text-align:center">
+                    <div style="color:var(--text-muted);margin-bottom:30px">Pelanggan</div>
+                    <div style="border-top:1px solid var(--border);padding-top:4px;min-width:90px">(________________)</div>
+                  </div>
+                </div>
+              </div>
+              <div style="display:flex;gap:10px;margin-top:12px">
+                <button class="btn btn-primary" style="flex:1;justify-content:center" onclick="window.print()">
+                  <i data-feather="printer"></i> Cetak Nota
+                </button>
+                <button class="btn btn-secondary" onclick="niResetForm()" style="flex:1;justify-content:center">
+                  <i data-feather="plus"></i> Order Baru
+                </button>
+              </div>
+            </div>
+          </div>
+
+        </div><!-- /order-input-grid -->
+      </div>
+
       <!-- ========== ORDERS PAGE ========== -->
       <div class="page" id="page-orders">
         <div class="filter-bar">
@@ -458,9 +700,9 @@ $userInfo = getUserInfo();
             <option value="completed">Selesai</option>
             <option value="cancelled">Dibatalkan</option>
           </select>
-          <a href="order_baru.php" class="btn btn-primary btn-sm">
+          <button class="btn btn-primary btn-sm" onclick="navigate('order-input')">
             <i data-feather="plus-circle"></i> Input Order Baru
-          </a>
+          </button>
         </div>
         <div id="orders-list">
           <div class="skeleton" style="height:120px;margin-bottom:12px;border-radius:12px"></div>
@@ -520,6 +762,39 @@ $userInfo = getUserInfo();
                 </tbody>
               </table>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ========== PRODUCTS PAGE ========== -->
+      <div class="page" id="page-products">
+        <div class="filter-bar">
+          <div class="search-box">
+            <i data-feather="search"></i>
+            <input type="text" id="products-search" placeholder="Cari nama atau kode produk..." oninput="filterProducts()" />
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="openAddProductModal()" id="btn-add-product">
+            <i data-feather="plus"></i> Tambah Produk
+          </button>
+        </div>
+        <div class="card">
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Kode</th>
+                  <th>Nama Produk</th>
+                  <th>Kategori</th>
+                  <th>Satuan</th>
+                  <th>Harga Default</th>
+                  <th>Keterangan</th>
+                  <th>Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="products-tbody">
+                <tr><td colspan="7"><div class="skeleton" style="height:36px"></div></td></tr>
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
@@ -695,6 +970,58 @@ $userInfo = getUserInfo();
       <button type="button" class="btn btn-secondary" onclick="closeModal('modal-new-delivery')">Nanti</button>
       <button class="btn btn-primary" onclick="submitNewDelivery()"><i data-feather="truck"></i> Buat Pengiriman</button>
     </div>
+  </div>
+</div>
+
+<!-- Add/Edit Product Modal -->
+<div class="modal-overlay" id="modal-add-product">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-product-title">Tambah Produk</div>
+      <button class="modal-close" onclick="closeModal('modal-add-product')"><i data-feather="x"></i></button>
+    </div>
+    <form onsubmit="submitProduct(event)">
+      <input type="hidden" id="product-id" value="">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Nama Produk *</label>
+          <input class="form-control" id="product-name" required placeholder="Cetak Spanduk" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Harga Default (Rp) *</label>
+          <input type="number" class="form-control" id="product-price" required min="0" placeholder="35000" />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Kategori</label>
+          <select class="form-control" id="product-category">
+            <option value="">-- Pilih Kategori --</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Satuan</label>
+          <select class="form-control" id="product-unit">
+            <option value="">-- Pilih Satuan --</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Keterangan</label>
+        <textarea class="form-control" id="product-desc" rows="2"
+          placeholder="Ukuran, bahan, spesifikasi standar..."></textarea>
+      </div>
+      <div class="form-group" id="product-active-wrap" style="display:none">
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+          <input type="checkbox" id="product-active" checked style="width:16px;height:16px;accent-color:var(--primary)" />
+          <span class="form-label" style="margin:0">Produk Aktif</span>
+        </label>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('modal-add-product')">Batal</button>
+        <button type="submit" class="btn btn-primary"><i data-feather="save"></i> Simpan</button>
+      </div>
+    </form>
   </div>
 </div>
 
