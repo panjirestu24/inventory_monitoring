@@ -438,18 +438,115 @@
 <script>
 feather.replace();
 
+// ============================================================
+// REALTIME POLLING — setiap 4 detik
+// ============================================================
+let pollingInterval  = null;
+let currentOrderNum  = null;
+let lastOrderStatus  = null;
+let lastDelivStatus  = null;
+
+function startPolling(orderNum) {
+  stopPolling();
+  currentOrderNum = orderNum;
+  pollingInterval = setInterval(pollStatus, 4000);
+}
+
+function stopPolling() {
+  if (pollingInterval) { clearInterval(pollingInterval); pollingInterval = null; }
+}
+
+async function pollStatus() {
+  if (!currentOrderNum) return;
+  try {
+    const res  = await fetch(`api/deliveries.php?action=track&order_number=${encodeURIComponent(currentOrderNum)}`);
+    const data = await res.json();
+    if (!data.success) return;
+
+    const d              = data.data;
+    const newOrder       = d.order_status;
+    const newDeliv       = d.delivery_status || null;
+    const statusChanged  = (newOrder !== lastOrderStatus || newDeliv !== lastDelivStatus);
+
+    if (statusChanged) {
+      lastOrderStatus = newOrder;
+      lastDelivStatus = newDeliv;
+      renderResult(d);
+      showStatusToast(newOrder, newDeliv);
+    }
+
+    // Hentikan polling kalau sudah status final
+    const isFinal = newOrder === 'cancelled' ||
+                   (newOrder === 'completed' && newDeliv === 'received');
+    if (isFinal) { stopPolling(); setPollingBadge(false); }
+    else { setPollingBadge(true); }
+
+  } catch (e) { setPollingBadge(false, 'Offline'); }
+}
+
+function setPollingBadge(live, text) {
+  const badge = document.getElementById('polling-badge');
+  const dot   = document.getElementById('polling-dot');
+  if (!badge) return;
+  badge.textContent   = text || (live ? ' Live' : ' Offline');
+  badge.style.color   = live ? '#34d399' : '#94a3b8';
+  badge.style.borderColor = live ? 'rgba(16,185,129,0.3)' : 'rgba(148,163,184,0.2)';
+  badge.style.background  = live ? 'rgba(16,185,129,0.1)' : 'rgba(148,163,184,0.08)';
+  if (dot) {
+    dot.style.background = live ? '#34d399' : '#94a3b8';
+    dot.style.animationName = live ? 'pulseDot' : 'none';
+  }
+}
+
+function showStatusToast(orderStatus, delivStatus) {
+  const old = document.getElementById('status-toast');
+  if (old) old.remove();
+  const label = delivStatus
+    ? `Pengiriman: <strong>${delivLabel(delivStatus)}</strong>`
+    : `Status order: <strong>${orderStatusLabel(orderStatus)}</strong>`;
+  const t = document.createElement('div');
+  t.id = 'status-toast';
+  t.style.cssText = `position:fixed;bottom:24px;right:24px;z-index:999;
+    background:#1e1e35;border:1px solid rgba(16,185,129,0.4);border-radius:10px;
+    padding:14px 18px;display:flex;align-items:center;gap:10px;
+    font-size:13px;color:#f1f5f9;box-shadow:0 4px 24px rgba(0,0,0,0.5);
+    animation:slideInToast .3s ease`;
+  t.innerHTML = `<span style="font-size:18px">🔔</span><span>${label}</span>`;
+  document.body.appendChild(t);
+  setTimeout(() => {
+    t.style.animation = 'slideOutToast .3s ease forwards';
+    setTimeout(() => t.remove(), 300);
+  }, 4000);
+}
+
+// Hentikan polling saat tab tersembunyi, lanjutkan saat kembali
+window.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    stopPolling();
+  } else if (currentOrderNum && lastOrderStatus) {
+    const isFinal = lastOrderStatus === 'cancelled' ||
+                   (lastOrderStatus === 'completed' && lastDelivStatus === 'received');
+    if (!isFinal) startPolling(currentOrderNum);
+  }
+});
+window.addEventListener('beforeunload', stopPolling);
+
+// ============================================================
+// TRACK ORDER
+// ============================================================
 async function trackOrder() {
-  const input   = document.getElementById('order-input');
-  const btn     = document.getElementById('btn-track');
-  const result  = document.getElementById('result');
+  const input    = document.getElementById('order-input');
+  const btn      = document.getElementById('btn-track');
+  const result   = document.getElementById('result');
   const orderNum = input.value.trim().toUpperCase();
 
-  if (!orderNum) {
-    input.focus();
-    return;
-  }
+  if (!orderNum) { input.focus(); return; }
 
-  // Loading state
+  // Reset polling sebelumnya
+  stopPolling();
+  lastOrderStatus = null;
+  lastDelivStatus = null;
+
   btn.disabled = true;
   result.className = '';
   result.innerHTML = '<div class="loading"><div class="spinner"></div> Mencari pesanan...</div>';
@@ -465,7 +562,7 @@ async function trackOrder() {
           <i data-feather="alert-circle"></i>
           <div>
             <div style="font-weight:700;margin-bottom:4px">Pesanan tidak ditemukan</div>
-            <div style="font-size:12px">Nomor order "<strong>${orderNum}</strong>" tidak ada dalam sistem. Pastikan nomor order yang kamu masukkan sudah benar.</div>
+            <div style="font-size:12px">Nomor order "<strong>${orderNum}</strong>" tidak ada dalam sistem.</div>
           </div>
         </div>`;
       feather.replace();
@@ -473,7 +570,16 @@ async function trackOrder() {
       return;
     }
 
-    renderResult(data.data);
+    const d = data.data;
+    lastOrderStatus = d.order_status;
+    lastDelivStatus = d.delivery_status || null;
+    renderResult(d);
+
+    // Mulai polling kalau belum final
+    const isFinal = d.order_status === 'cancelled' ||
+                   (d.order_status === 'completed' && d.delivery_status === 'received');
+    if (!isFinal) startPolling(orderNum);
+
   } catch (e) {
     result.innerHTML = `
       <div class="error-box">
@@ -492,7 +598,21 @@ async function trackOrder() {
 function renderResult(d) {
   const result = document.getElementById('result');
 
-  // ── Order Info ──────────────────────────────────────────────
+  // ── Polling badge ──────────────────────────────────────────
+  const isFinal = d.order_status === 'cancelled' ||
+                 (d.order_status === 'completed' && d.delivery_status === 'received');
+  const pollingBadge = !isFinal ? `
+    <div style="display:flex;align-items:center;justify-content:flex-end;margin-bottom:12px">
+      <div id="polling-badge" style="display:inline-flex;align-items:center;gap:6px;
+        padding:5px 12px;border-radius:20px;font-size:12px;font-weight:600;
+        background:rgba(16,185,129,0.1);color:#34d399;border:1px solid rgba(16,185,129,0.3)">
+        <span id="polling-dot" style="width:7px;height:7px;border-radius:50%;
+          background:#34d399;flex-shrink:0;animation:pulseDot 1.5s infinite"></span>
+        Live
+      </div>
+    </div>` : '';
+
+  // ── Order Info ─────────────────────────────────────────────
   const infoHtml = `
     <div class="info-card">
       <div class="info-card-header">
@@ -509,111 +629,86 @@ function renderResult(d) {
         <div class="info-item"><label>Total</label><span style="color:#34d399">${formatCurrency(d.grand_total)}</span></div>
         ${d.order_notes ? `<div class="info-item" style="grid-column:1/-1"><label>Catatan</label><span>${d.order_notes}</span></div>` : ''}
       </div>
-    </div>
-  `;
+    </div>`;
 
-  // ── Order Status Timeline ───────────────────────────────────
+  // ── Order Status Timeline ──────────────────────────────────
   const orderSteps = [
-    { key: 'pending',       label: 'Pesanan Diterima',     desc: 'Pesanan kamu sudah masuk ke sistem kami.',   icon: 'file-text' },
-    { key: 'confirmed',     label: 'Dikonfirmasi',         desc: 'Pesanan telah dikonfirmasi dan dijadwalkan.', icon: 'check-square' },
-    { key: 'in_progress',   label: 'Sedang Diproses',      desc: 'Pesanan sedang dalam tahap produksi.',       icon: 'settings' },
-    { key: 'quality_check', label: 'Pengecekan Kualitas',  desc: 'Pesanan melewati quality control.',          icon: 'shield' },
-    { key: 'completed',     label: 'Selesai Diproduksi',   desc: 'Produksi selesai, siap untuk pengiriman.',   icon: 'package' },
+    { key:'pending',       label:'Pesanan Diterima',    desc:'Pesanan kamu sudah masuk ke sistem kami.',    icon:'file-text'   },
+    { key:'confirmed',     label:'Dikonfirmasi',        desc:'Pesanan telah dikonfirmasi dan dijadwalkan.', icon:'check-square'},
+    { key:'in_progress',   label:'Sedang Diproses',     desc:'Pesanan sedang dalam tahap produksi.',        icon:'settings'    },
+    { key:'quality_check', label:'Pengecekan Kualitas', desc:'Pesanan melewati quality control.',           icon:'shield'      },
+    { key:'completed',     label:'Selesai Diproduksi',  desc:'Produksi selesai, siap untuk pengiriman.',   icon:'package'     },
   ];
-
-  const orderStatusOrder = ['pending','confirmed','in_progress','quality_check','completed'];
-  const currentOrderIdx  = orderStatusOrder.indexOf(d.order_status);
-
-  const orderTimelineHtml = orderSteps.map((step, idx) => {
-    let cls = '';
-    if (idx < currentOrderIdx) cls = 'done';
-    else if (idx === currentOrderIdx) cls = 'active';
-    return `
-      <div class="timeline-item ${cls}">
-        <div class="timeline-dot"><i data-feather="${step.icon}"></i></div>
-        <div class="timeline-label">${step.label}</div>
-        <div class="timeline-desc">${step.desc}</div>
-      </div>
-    `;
+  const orderIdx = ['pending','confirmed','in_progress','quality_check','completed'].indexOf(d.order_status);
+  const timelineHtml = orderSteps.map((s, i) => {
+    const cls = i < orderIdx ? 'done' : i === orderIdx ? 'active' : '';
+    return `<div class="timeline-item ${cls}">
+      <div class="timeline-dot"><i data-feather="${s.icon}"></i></div>
+      <div class="timeline-label">${s.label}</div>
+      <div class="timeline-desc">${s.desc}</div>
+    </div>`;
   }).join('');
 
-  const orderTimelineCard = `
+  const orderCard = `
     <div class="info-card">
       <div class="section-title">Status Pesanan</div>
-      <div class="timeline">
-        ${orderTimelineHtml}
-      </div>
-    </div>
-  `;
+      <div class="timeline">${timelineHtml}</div>
+    </div>`;
 
-  // ── Delivery Info ───────────────────────────────────────────
+  // ── Delivery Info ──────────────────────────────────────────
   let deliveryHtml = '';
   if (d.order_status === 'completed' || d.delivery_id) {
     if (d.delivery_id) {
       const delivSteps = [
-        { key: 'prepared',  label: 'Disiapkan',          desc: 'Paket sedang disiapkan untuk pengiriman.',    icon: 'package' },
-        { key: 'shipping',  label: 'Dalam Pengiriman',   desc: 'Paket sedang dalam perjalanan ke tujuan.',    icon: 'truck' },
-        { key: 'arrived',   label: 'Tiba di Tujuan',     desc: 'Paket telah sampai di lokasi tujuan.',        icon: 'map-pin' },
-        { key: 'received',  label: 'Diterima',           desc: 'Paket telah diterima oleh penerima.',         icon: 'check-circle' },
+        { key:'prepared', label:'Disiapkan',        desc:'Paket sedang disiapkan untuk pengiriman.',  icon:'package'      },
+        { key:'shipping', label:'Dalam Pengiriman', desc:'Paket sedang dalam perjalanan ke tujuan.',  icon:'truck'        },
+        { key:'arrived',  label:'Tiba di Tujuan',   desc:'Paket telah sampai di lokasi tujuan.',      icon:'map-pin'      },
+        { key:'received', label:'Diterima',         desc:'Paket telah diterima oleh penerima.',       icon:'check-circle' },
       ];
-      const delivStatusOrder = ['prepared','shipping','arrived','received'];
-      const currentDelivIdx  = delivStatusOrder.indexOf(d.delivery_status);
-
-      const delivTimelineHtml = delivSteps.map((step, idx) => {
-        let cls = '';
-        if (idx < currentDelivIdx) cls = 'done';
-        else if (idx === currentDelivIdx) cls = 'active';
-        return `
-          <div class="timeline-item ${cls}">
-            <div class="timeline-dot"><i data-feather="${step.icon}"></i></div>
-            <div class="timeline-label">${step.label}</div>
-            <div class="timeline-desc">${step.desc}</div>
-            ${idx === currentDelivIdx && step.key === 'arrived' && d.actual_arrival ? `<div class="timeline-time">⏰ ${formatDateTime(d.actual_arrival)}</div>` : ''}
-          </div>
-        `;
+      const delivIdx = ['prepared','shipping','arrived','received'].indexOf(d.delivery_status);
+      const delivTimeline = delivSteps.map((s, i) => {
+        const cls = i < delivIdx ? 'done' : i === delivIdx ? 'active' : '';
+        return `<div class="timeline-item ${cls}">
+          <div class="timeline-dot"><i data-feather="${s.icon}"></i></div>
+          <div class="timeline-label">${s.label}</div>
+          <div class="timeline-desc">${s.desc}</div>
+          ${i === delivIdx && s.key === 'arrived' && d.actual_arrival ? `<div class="timeline-time">⏰ ${formatDateTime(d.actual_arrival)}</div>` : ''}
+        </div>`;
       }).join('');
 
       deliveryHtml = `
         <div class="delivery-card">
           <div class="section-title">Status Pengiriman</div>
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
-            <div>
-              <span class="badge badge-${d.delivery_status}">${delivLabel(d.delivery_status)}</span>
-            </div>
+            <span class="badge badge-${d.delivery_status}">${delivLabel(d.delivery_status)}</span>
             ${d.estimated_arrival ? `<div style="font-size:12px;color:var(--text-muted)">Estimasi tiba: <strong style="color:var(--text-secondary)">${formatDate(d.estimated_arrival)}</strong></div>` : ''}
           </div>
-          <div class="timeline">
-            ${delivTimelineHtml}
-          </div>
+          <div class="timeline">${delivTimeline}</div>
           <div class="delivery-grid" style="border-top:1px solid var(--border);padding-top:16px;margin-top:8px">
-            ${d.recipient_name ? `<div class="info-item"><label>Penerima</label><span>${d.recipient_name}</span></div>` : ''}
-            ${d.recipient_phone ? `<div class="info-item"><label>No. Telepon</label><span>${d.recipient_phone}</span></div>` : ''}
-            ${d.destination_city ? `<div class="info-item"><label>Kota Tujuan</label><span>${d.destination_city}</span></div>` : ''}
-            ${d.destination_address ? `<div class="info-item" style="grid-column:1/-1"><label>Alamat Tujuan</label><span>${d.destination_address}</span></div>` : ''}
-            ${d.delivery_notes ? `<div class="info-item" style="grid-column:1/-1"><label>Catatan Pengiriman</label><span>${d.delivery_notes}</span></div>` : ''}
+            ${d.recipient_name    ? `<div class="info-item"><label>Penerima</label><span>${d.recipient_name}</span></div>` : ''}
+            ${d.recipient_phone   ? `<div class="info-item"><label>Telepon</label><span>${d.recipient_phone}</span></div>` : ''}
+            ${d.destination_city  ? `<div class="info-item"><label>Kota Tujuan</label><span>${d.destination_city}</span></div>` : ''}
+            ${d.destination_address ? `<div class="info-item" style="grid-column:1/-1"><label>Alamat</label><span>${d.destination_address}</span></div>` : ''}
+            ${d.delivery_notes    ? `<div class="info-item" style="grid-column:1/-1"><label>Catatan</label><span>${d.delivery_notes}</span></div>` : ''}
           </div>
           ${d.proof_image ? `
           <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:8px">
             <div class="info-item" style="margin-bottom:10px"><label>📷 Foto Bukti Penerimaan</label></div>
             <img src="uploads/proof/${d.proof_image}"
               style="max-width:260px;border-radius:10px;border:2px solid var(--success);cursor:zoom-in"
-              onclick="this.style.maxWidth=this.style.maxWidth==='100%'?'260px':'100%'"
-              title="Klik untuk perbesar" />
+              onclick="this.style.maxWidth=this.style.maxWidth==='100%'?'260px':'100%'" />
           </div>` : ''}
-        </div>
-      `;
+        </div>`;
     } else {
-      // Order selesai tapi belum ada data pengiriman
       deliveryHtml = `
         <div class="no-delivery">
           <i data-feather="truck"></i>
           <p>Pesanan kamu sudah selesai diproduksi.<br>Informasi pengiriman akan tersedia segera.</p>
-        </div>
-      `;
+        </div>`;
     }
   }
 
-  result.innerHTML = infoHtml + orderTimelineCard + deliveryHtml;
+  result.innerHTML = pollingBadge + infoHtml + orderCard + deliveryHtml;
   result.classList.add('visible');
   feather.replace();
 }
@@ -639,6 +734,14 @@ function formatCurrency(n) {
   const num = parseFloat(n) || 0;
   return 'Rp ' + num.toLocaleString('id-ID', { minimumFractionDigits:0, maximumFractionDigits:0 });
 }
+
+// Animasi toast
+const s = document.createElement('style');
+s.textContent = `
+  @keyframes slideInToast  { from{opacity:0;transform:translateX(60px)} to{opacity:1;transform:translateX(0)} }
+  @keyframes slideOutToast { to{opacity:0;transform:translateX(60px)} }
+`;
+document.head.appendChild(s);
 </script>
 </body>
 </html>

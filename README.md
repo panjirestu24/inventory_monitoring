@@ -39,7 +39,6 @@ Sistem manajemen order, inventory bahan baku, dan monitoring pengiriman untuk us
 |----------------------|---------------------------------------------|-------------|
 | `login.php`          | Login staff                                 | Publik      |
 | `index.php`          | Dashboard & semua modul internal            | Login       |
-| `order_baru.php`     | Input order baru + cetak nota               | Login       |
 | `track.php`          | Tracking status pesanan oleh pelanggan      | Publik      |
 
 ---
@@ -48,7 +47,7 @@ Sistem manajemen order, inventory bahan baku, dan monitoring pengiriman untuk us
 
 ### Input Order (Pelanggan Datang Langsung)
 ```
-1. Admin/Operator buka order_baru.php
+1. Admin/Operator buka index.php → menu "Input Order Baru"
 2. Isi nama + no HP pelanggan
    → Autocomplete jika pelanggan pernah order
    → Otomatis simpan ke database jika baru
@@ -89,8 +88,7 @@ Buka track.php
 
 ```
 inventory_monitoring/
-├── index.php              # App utama (SPA)
-├── order_baru.php         # Form input order + nota
+├── index.php              # App utama (SPA — termasuk input order & nota)
 ├── track.php              # Halaman tracking publik
 ├── login.php / logout.php
 ├── auth_check.php         # Middleware session

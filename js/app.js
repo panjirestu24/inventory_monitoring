@@ -1697,7 +1697,7 @@ function renderCustomersList(customers) {
       <i data-feather="users"></i>
       <h3>Belum ada pelanggan</h3>
       <p>Pelanggan akan otomatis terdaftar saat order baru dibuat.</p>
-      <a href="order_baru.php" class="btn btn-primary mt-4">
+      <a href="index.php" onclick="navigate('order-input');return false;" class="btn btn-primary mt-4">
         <i data-feather="plus-circle"></i> Input Order Baru
       </a>
     </div></div>`;

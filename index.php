@@ -690,7 +690,7 @@ $userInfo = getUserInfo();
                 </div>
               </div>
               <div style="display:flex;gap:10px;margin-top:12px">
-                <button class="btn btn-primary" style="flex:1;justify-content:center" onclick="window.print()">
+                <button class="btn btn-primary" style="flex:1;justify-content:center" onclick="cetakNota()">
                   <i data-feather="printer"></i> Cetak Nota
                 </button>
                 <button class="btn btn-secondary" onclick="niResetForm()" style="flex:1;justify-content:center">
@@ -1052,6 +1052,26 @@ $userInfo = getUserInfo();
   <img id="lightbox-img" src="" alt="Bukti Pengiriman" />
 </div>
 
+<!-- ===== PRINT ROOT — hanya elemen ini yang tampil saat Ctrl+P ===== -->
+<div id="print-nota-root"></div>
+
 <script src="js/app.js?v=<?= time() ?>"></script>
+<script>
+// Fungsi cetak nota — clone isi nota ke print-root lalu print
+function cetakNota() {
+  const nota = document.getElementById('ni-nota-print');
+  if (!nota) { return; }
+  const root = document.getElementById('print-nota-root');
+  // Clone konten nota
+  root.innerHTML = '';
+  const clone = nota.cloneNode(true);
+  clone.removeAttribute('id');
+  clone.style.cssText = ''; // biarkan CSS @media print yang atur
+  root.appendChild(clone);
+  window.print();
+  // Bersihkan setelah print dialog ditutup
+  setTimeout(() => { root.innerHTML = ''; }, 1000);
+}
+</script>
 </body>
 </html>
