@@ -48,7 +48,7 @@ CREATE TABLE `users` (
   `name` VARCHAR(100) NOT NULL,
   `email` VARCHAR(100) NOT NULL UNIQUE,
   `password` VARCHAR(255) NOT NULL,
-  `role` ENUM('admin','operator','viewer') NOT NULL DEFAULT 'operator',
+  `role` ENUM('admin','operator') NOT NULL DEFAULT 'operator',
   `avatar` VARCHAR(255) DEFAULT NULL,
   `is_active` TINYINT(1) NOT NULL DEFAULT 1,
   `last_login` DATETIME DEFAULT NULL,
@@ -413,8 +413,7 @@ SET FOREIGN_KEY_CHECKS = 1;
 -- Users (password semua = "password")
 INSERT INTO `users` (`name`, `email`, `password`, `role`) VALUES
 ('Administrator',  'admin@percetakan.com',    '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'admin'),
-('Operator 1',     'operator1@percetakan.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'operator'),
-('Viewer',         'viewer@percetakan.com',    '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'viewer');
+('Operator 1',     'operator1@percetakan.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'operator');
 
 -- Units (Satuan)
 INSERT INTO `units` (`name`, `symbol`) VALUES
@@ -507,7 +506,7 @@ INSERT INTO `settings` (`key`, `value`, `group`, `label`, `type`) VALUES
 -- SELESAI!
 -- ============================================================
 -- Tabel yang dibuat (15 tabel):
---   1.  users            - Pengguna sistem (admin/operator/viewer)
+--   1.  users            - Pengguna sistem (admin/operator)
 --   2.  categories       - Kategori bahan baku
 --   3.  units            - Satuan barang (Rim, Kg, Liter, dll)
 --   4.  suppliers        - Data supplier/pemasok
@@ -527,7 +526,6 @@ INSERT INTO `settings` (`key`, `value`, `group`, `label`, `type`) VALUES
 --   18. settings         - Pengaturan sistem
 -- ============================================================
 -- AKUN LOGIN (password = "password"):
---   admin@percetakan.com    → Role: Admin (full access)
+--   admin@percetakan.com     → Role: Admin (full access)
 --   operator1@percetakan.com → Role: Operator
---   viewer@percetakan.com   → Role: Viewer (read only)
 -- ============================================================

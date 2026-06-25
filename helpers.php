@@ -5,7 +5,7 @@
 
 // Cek apakah user punya hak akses tertentu
 function hasPermission($action) {
-    $role = $_SESSION['user_role'] ?? 'viewer';
+    $role = $_SESSION['user_role'] ?? 'operator';
     
     // Definisi hak akses per role
     $permissions = [
@@ -15,9 +15,6 @@ function hasPermission($action) {
         'operator' => [
             'view', 'create', 'edit', 'export'
         ],
-        'viewer' => [
-            'view'
-        ]
     ];
     
     // Cek apakah role punya permission untuk action ini
@@ -33,7 +30,7 @@ function canExport() { return hasPermission('export'); }
 
 // Get user role untuk JavaScript
 function getUserRole() {
-    return $_SESSION['user_role'] ?? 'viewer';
+    return $_SESSION['user_role'] ?? 'operator';
 }
 
 // Get user info
@@ -42,6 +39,6 @@ function getUserInfo() {
         'id' => $_SESSION['user_id'] ?? 0,
         'name' => $_SESSION['user_name'] ?? 'Guest',
         'email' => $_SESSION['user_email'] ?? '',
-        'role' => $_SESSION['user_role'] ?? 'viewer',
+        'role' => $_SESSION['user_role'] ?? 'operator',
     ];
 }

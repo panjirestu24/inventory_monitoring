@@ -294,10 +294,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <strong>Operator:</strong> 
                 <span>operator1@percetakan.com</span>
             </div>
-            <div class="demo-account">
-                <strong>Viewer:</strong> 
-                <span>viewer@percetakan.com</span>
-            </div>
             <div style="margin-top:12px; padding-top:12px; border-top:1px solid rgba(6,182,212,0.2); color:#94a3b8; font-size:11px;">
                 💡 Password semua akun: <strong style="color:#22d3ee">password</strong>
             </div>

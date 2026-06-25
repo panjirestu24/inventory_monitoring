@@ -59,7 +59,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 // ROLE-BASED ACCESS CONTROL
 // ============================================================
 function applyRoleBasedUI() {
-  const role = window.APP_CONFIG?.userRole || 'viewer';
+  const role = window.APP_CONFIG?.userRole || 'operator';
   const perms = window.APP_CONFIG?.permissions || {};
   
   // Helper untuk hide element
@@ -74,41 +74,6 @@ function applyRoleBasedUI() {
     hideElements('.btn-primary[onclick*="openAdd"]');
     hideElements('.btn-primary[onclick*="Tambah"]');
     hideElements('#header-action-btn');
-  }
-  
-  // Kalau viewer, hide semua tombol edit & hapus
-  if (role === 'viewer') {
-    console.log('🔒 Mode Viewer: Hanya bisa lihat data');
-    
-    // Hide semua tombol aksi
-    hideElements('button[onclick*="edit"]');
-    hideElements('button[onclick*="Edit"]');
-    hideElements('button[onclick*="delete"]');
-    hideElements('button[onclick*="Hapus"]');
-    hideElements('button[onclick*="submit"]');
-    hideElements('button[onclick*="change"]');
-    hideElements('.btn-danger');
-    hideElements('.btn-success[onclick*="submit"]');
-    
-    // Disable semua form input
-    setTimeout(() => {
-      document.querySelectorAll('input, select, textarea').forEach(el => {
-        if (!el.closest('.search-box')) { // Kecuali search box
-          el.disabled = true;
-        }
-      });
-    }, 1000);
-    
-    // Tampilkan badge viewer di header
-    const headerActions = document.querySelector('.header-actions');
-    if (headerActions) {
-      const badge = document.createElement('div');
-      badge.className = 'badge badge-pending';
-      badge.style.cssText = 'margin-right:12px;padding:6px 12px;background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.3)';
-      badge.innerHTML = '<i data-feather="eye"></i> Mode Read-Only';
-      headerActions.insertBefore(badge, headerActions.firstChild);
-      feather.replace();
-    }
   }
   
   // Kalau operator, hide tombol hapus aja
@@ -137,7 +102,7 @@ function applyRoleBasedUI() {
 // Cek permission sebelum action
 function checkPermission(action) {
   const perms = window.APP_CONFIG?.permissions || {};
-  const role = window.APP_CONFIG?.userRole || 'viewer';
+  const role = window.APP_CONFIG?.userRole || 'operator';
   
   const actionMap = {
     'create': perms.canCreate,
@@ -180,6 +145,7 @@ const pageTitles = {
   customers:        ['Pelanggan', 'Riwayat pelanggan & order'],
   products:         ['Produk & Harga', 'Daftar produk/jasa percetakan'],
   reports:          ['Laporan', 'Analisis & ekspor data'],
+  'manage-users':   ['Kelola User', 'Manajemen akun & hak akses'],
 };
 
 function navigate(page) {
@@ -214,6 +180,7 @@ function navigate(page) {
     case 'machines':       loadMachinesPage(); break;
     case 'customers':      loadCustomers(); break;
     case 'products':       loadProducts(); break;
+    case 'manage-users':   loadUsers(); break;
   }
 
   feather.replace();
@@ -1948,4 +1915,168 @@ function priorityLabel(p) {
 function machineStatusColor(s) {
   const map = { active:'#10b981', idle:'#94a3b8', maintenance:'#f59e0b', offline:'#ef4444' };
   return map[s] || '#94a3b8';
+}
+
+// ============================================================
+// MANAGE USERS (Admin Only)
+// ============================================================
+let allUsers = [];
+
+async function loadUsers() {
+  const search = document.getElementById('users-search')?.value || '';
+  const role   = document.getElementById('users-role-filter')?.value || '';
+  const params = new URLSearchParams({ action: 'list', search, role });
+  const data   = await apiFetch(`api/users.php?${params}`);
+  if (!data) {
+    showToast('Akses ditolak atau gagal memuat data user', 'error');
+    return;
+  }
+  allUsers = data?.data || [];
+  renderUsersTable(allUsers);
+  feather.replace();
+}
+
+function filterUsers() { loadUsers(); }
+
+function renderUsersTable(users) {
+  const tbody = document.getElementById('users-tbody');
+  if (!users.length) {
+    tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state">
+      <i data-feather="users"></i><h3>Tidak ada user ditemukan</h3>
+    </div></td></tr>`;
+    feather.replace(); return;
+  }
+
+  const roleColors = {
+    admin:    { bg: 'rgba(99,102,241,0.15)',  color: '#a5b4fc', border: 'rgba(99,102,241,0.3)'  },
+    operator: { bg: 'rgba(6,182,212,0.15)',   color: '#22d3ee', border: 'rgba(6,182,212,0.3)'   },
+  };
+  const roleIcons = { admin: '👑', operator: '⚙️' };
+  const selfId = window.APP_CONFIG?.userId;
+
+  tbody.innerHTML = users.map(u => {
+    const rc    = roleColors[u.role] || roleColors.operator;
+    const isSelf = u.id == selfId;
+    return `
+      <tr>
+        <td>
+          <div style="display:flex;align-items:center;gap:10px">
+            <div style="width:34px;height:34px;border-radius:50%;
+              background:linear-gradient(135deg,var(--primary),var(--secondary));
+              display:flex;align-items:center;justify-content:center;
+              font-size:13px;font-weight:700;color:white;flex-shrink:0">
+              ${u.name.charAt(0).toUpperCase()}
+            </div>
+            <div>
+              <div style="font-weight:600;color:var(--text-primary)">${u.name}
+                ${isSelf ? '<span style="font-size:10px;color:var(--accent);margin-left:6px">(Anda)</span>' : ''}
+              </div>
+            </div>
+          </div>
+        </td>
+        <td style="color:var(--text-muted);font-size:12px">${u.email}</td>
+        <td>
+          <span style="display:inline-flex;align-items:center;gap:5px;padding:3px 10px;
+            border-radius:20px;font-size:11px;font-weight:600;
+            background:${rc.bg};color:${rc.color};border:1px solid ${rc.border}">
+            ${roleIcons[u.role] || ''} ${u.role.charAt(0).toUpperCase() + u.role.slice(1)}
+          </span>
+        </td>
+        <td>
+          <span class="badge badge-${u.is_active == 1 ? 'active' : 'offline'}">
+            ${u.is_active == 1 ? 'Aktif' : 'Nonaktif'}
+          </span>
+        </td>
+        <td style="font-size:12px;color:var(--text-muted)">${u.last_login ? formatDateTime(u.last_login) : '—'}</td>
+        <td style="font-size:12px;color:var(--text-muted)">${formatDate(u.created_at)}</td>
+        <td>
+          <div style="display:flex;gap:4px">
+            <button class="btn btn-secondary btn-sm btn-icon" title="Edit"
+              onclick="openEditUserModal(${u.id})"><i data-feather="edit-2"></i></button>
+            ${!isSelf ? `<button class="btn btn-danger btn-sm btn-icon" title="${u.is_active == 1 ? 'Nonaktifkan' : 'Aktifkan'}"
+              onclick="toggleUserStatus(${u.id}, ${u.is_active})">
+              <i data-feather="${u.is_active == 1 ? 'user-x' : 'user-check'}"></i></button>` : ''}
+          </div>
+        </td>
+      </tr>`;
+  }).join('');
+  feather.replace();
+}
+
+function openAddUserModal() {
+  document.getElementById('modal-user-title').textContent = 'Tambah User Baru';
+  document.getElementById('user-id').value        = '';
+  document.getElementById('user-name').value      = '';
+  document.getElementById('user-email').value     = '';
+  document.getElementById('user-email').disabled  = false;
+  document.getElementById('user-role').value      = 'operator';
+  document.getElementById('user-password').value  = '';
+  document.getElementById('user-password').required = true;
+  document.getElementById('user-pass-label').textContent = 'Password *';
+  document.getElementById('user-pass-hint').style.display = 'none';
+  document.getElementById('user-status-wrap').style.display = 'none';
+  openModal('modal-add-user');
+}
+
+async function openEditUserModal(id) {
+  const data = await apiFetch(`api/users.php?action=get&id=${id}`);
+  if (!data?.berhasil) { showToast('Gagal mengambil data user', 'error'); return; }
+  const u = data.data;
+
+  document.getElementById('modal-user-title').textContent  = 'Edit User';
+  document.getElementById('user-id').value                 = u.id;
+  document.getElementById('user-name').value               = u.name;
+  document.getElementById('user-email').value              = u.email;
+  document.getElementById('user-email').disabled           = false;
+  document.getElementById('user-role').value               = u.role;
+  document.getElementById('user-password').value           = '';
+  document.getElementById('user-password').required        = false;
+  document.getElementById('user-pass-label').textContent   = 'Password Baru';
+  document.getElementById('user-pass-hint').style.display  = 'block';
+  document.getElementById('user-status-wrap').style.display = 'block';
+  document.getElementById('user-is-active').value          = u.is_active;
+  openModal('modal-add-user');
+}
+
+async function submitAddUser(e) {
+  e.preventDefault();
+  const userId = document.getElementById('user-id').value;
+  const isEdit = userId !== '';
+
+  const payload = {
+    name:      document.getElementById('user-name').value.trim(),
+    email:     document.getElementById('user-email').value.trim(),
+    role:      document.getElementById('user-role').value,
+    password:  document.getElementById('user-password').value,
+  };
+  if (isEdit) {
+    payload.id        = userId;
+    payload.is_active = document.getElementById('user-is-active').value;
+  }
+
+  const res = isEdit
+    ? await apiPut('api/users.php', payload)
+    : await apiPost('api/users.php', payload);
+
+  if (res?.success || res?.berhasil) {
+    showToast(isEdit ? 'User berhasil diupdate' : 'User berhasil ditambahkan', 'success');
+    closeModal('modal-add-user');
+    loadUsers();
+  } else {
+    showToast(res?.message || res?.pesan || 'Gagal menyimpan user', 'error');
+  }
+}
+
+async function toggleUserStatus(id, currentStatus) {
+  const newStatus = currentStatus == 1 ? 0 : 1;
+  const label     = newStatus === 0 ? 'menonaktifkan' : 'mengaktifkan';
+  if (!confirm(`Yakin ingin ${label} user ini?`)) return;
+
+  const res = await apiPut('api/users.php', { id, is_active: newStatus });
+  if (res?.success || res?.berhasil) {
+    showToast(`User berhasil di${label === 'menonaktifkan' ? 'nonaktifkan' : 'aktifkan'}`, 'success');
+    loadUsers();
+  } else {
+    showToast(res?.message || 'Gagal mengubah status user', 'error');
+  }
 }

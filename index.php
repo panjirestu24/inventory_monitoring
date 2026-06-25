@@ -138,6 +138,15 @@ $userInfo = getUserInfo();
           <i data-feather="bar-chart-2"></i> Laporan
         </div>
       </div>
+
+      <?php if (($_SESSION['user_role'] ?? '') === 'admin'): ?>
+      <div class="nav-group">
+        <div class="nav-group-label">Admin</div>
+        <div class="nav-item" data-page="manage-users" onclick="navigate('manage-users')">
+          <i data-feather="user-check"></i> Kelola User
+        </div>
+      </div>
+      <?php endif; ?>
     </nav>
 
     <div class="sidebar-footer">
@@ -879,6 +888,44 @@ $userInfo = getUserInfo();
         </div>
       </div>
 
+      <!-- ========== MANAGE USERS PAGE (Admin Only) ========== -->
+      <div class="page" id="page-manage-users">
+        <div class="filter-bar">
+          <div class="search-box">
+            <i data-feather="search"></i>
+            <input type="text" id="users-search" placeholder="Cari nama atau email..." oninput="filterUsers()" />
+          </div>
+          <select class="form-control" id="users-role-filter" onchange="filterUsers()" style="width:auto">
+            <option value="">Semua Role</option>
+            <option value="admin">Admin</option>
+            <option value="operator">Operator</option>
+          </select>
+          <button class="btn btn-primary btn-sm" onclick="openAddUserModal()">
+            <i data-feather="user-plus"></i> Tambah User
+          </button>
+        </div>
+        <div class="card">
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Nama</th>
+                  <th>Email</th>
+                  <th>Role</th>
+                  <th>Status</th>
+                  <th>Terakhir Login</th>
+                  <th>Terdaftar</th>
+                  <th>Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="users-tbody">
+                <tr><td colspan="7"><div class="skeleton" style="height:36px"></div></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
     </main>
   </div><!-- /.main-wrapper -->
 </div><!-- /.app-layout -->
@@ -1038,6 +1085,65 @@ $userInfo = getUserInfo();
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" onclick="closeModal('modal-add-product')">Batal</button>
+        <button type="submit" class="btn btn-primary"><i data-feather="save"></i> Simpan</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal Add/Edit User -->
+<div class="modal-overlay" id="modal-add-user">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-user-title">Tambah User</div>
+      <button class="modal-close" onclick="closeModal('modal-add-user')"><i data-feather="x"></i></button>
+    </div>
+    <form onsubmit="submitAddUser(event)">
+      <input type="hidden" id="user-id" value="">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Nama Lengkap *</label>
+          <input class="form-control" id="user-name" required placeholder="Budi Santoso" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Email *</label>
+          <input type="email" class="form-control" id="user-email" required placeholder="budi@percetakan.com" />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Role *</label>
+          <select class="form-control" id="user-role" required>
+            <option value="operator">Operator</option>
+            <option value="admin">Admin</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" id="user-pass-label">Password *</label>
+          <input type="password" class="form-control" id="user-password" placeholder="Min. 6 karakter" autocomplete="new-password" />
+          <div id="user-pass-hint" style="font-size:11px;color:var(--text-muted);margin-top:4px;display:none">
+            Kosongkan jika tidak ingin mengubah password
+          </div>
+        </div>
+      </div>
+      <div id="user-status-wrap" style="display:none">
+        <div class="form-group">
+          <label class="form-label">Status Akun</label>
+          <select class="form-control" id="user-is-active">
+            <option value="1">Aktif</option>
+            <option value="0">Nonaktif</option>
+          </select>
+        </div>
+      </div>
+      <div style="background:var(--bg-base);border-radius:var(--radius-sm);padding:12px;margin-bottom:16px;font-size:12px;color:var(--text-muted)">
+        <strong style="color:var(--text-secondary)">Info Hak Akses:</strong>
+        <div style="margin-top:6px;display:grid;gap:4px">
+          <div>👑 <strong>Admin</strong> — Akses penuh termasuk kelola user</div>
+          <div>⚙️ <strong>Operator</strong> — Bisa tambah & edit data, tidak bisa hapus</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('modal-add-user')">Batal</button>
         <button type="submit" class="btn btn-primary"><i data-feather="save"></i> Simpan</button>
       </div>
     </form>

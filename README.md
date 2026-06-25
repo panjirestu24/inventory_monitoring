@@ -29,7 +29,6 @@ Sistem manajemen order, inventory bahan baku, dan monitoring pengiriman untuk us
 |----------|------------------------------|----------|
 | Admin    | admin@percetakan.com         | password |
 | Operator | operator1@percetakan.com     | password |
-| Viewer   | viewer@percetakan.com        | password |
 
 ---
 
@@ -117,14 +116,15 @@ inventory_monitoring/
 
 ## Role & Hak Akses
 
-| Aksi              | Admin | Operator | Viewer |
-|-------------------|-------|----------|--------|
-| Lihat semua data  | ✅    | ✅       | ✅     |
-| Tambah order      | ✅    | ✅       | ❌     |
-| Update status     | ✅    | ✅       | ❌     |
-| Upload bukti foto | ✅    | ✅       | ❌     |
-| Hapus data        | ✅    | ❌       | ❌     |
-| Export laporan    | ✅    | ✅       | ❌     |
+| Aksi              | Admin | Operator |
+|-------------------|-------|----------|
+| Lihat semua data  | ✅    | ✅       |
+| Tambah order      | ✅    | ✅       |
+| Update status     | ✅    | ✅       |
+| Upload bukti foto | ✅    | ✅       |
+| Hapus data        | ✅    | ❌       |
+| Export laporan    | ✅    | ✅       |
+| Kelola user       | ✅    | ❌       |
 
 ---
 
