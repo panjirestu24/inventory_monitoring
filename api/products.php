@@ -29,14 +29,7 @@ switch ($method) {
             );
             echo json_encode(['success' => true, 'data' => $stmt->fetchAll()]);
 
-        } elseif ($action === 'get') {
-            $id   = (int)($_GET['id'] ?? 0);
-            $stmt = $pdo->prepare("SELECT * FROM products WHERE id = ?");
-            $stmt->execute([$id]);
-            echo json_encode(['success' => true, 'data' => $stmt->fetch()]);
-
         } elseif ($action === 'all') {
-            // Termasuk yang nonaktif (untuk halaman manajemen admin)
             $stmt = $pdo->query(
                 "SELECT p.*, c.name as category_name, u.symbol as unit_symbol
                  FROM products p
@@ -45,11 +38,90 @@ switch ($method) {
                  ORDER BY c.name, p.name"
             );
             echo json_encode(['success' => true, 'data' => $stmt->fetchAll()]);
+
+        } elseif ($action === 'get') {
+            $id   = (int)($_GET['id'] ?? 0);
+            $stmt = $pdo->prepare("SELECT * FROM products WHERE id = ?");
+            $stmt->execute([$id]);
+            echo json_encode(['success' => true, 'data' => $stmt->fetch()]);
+
+        } elseif ($action === 'get_materials') {
+            $id = (int)($_GET['id'] ?? 0);
+            try {
+                $stmt = $pdo->prepare(
+                    "SELECT pm.*, i.name as item_name, i.code as item_code,
+                            u.symbol as unit_symbol, i.stock as current_stock
+                     FROM product_materials pm
+                     JOIN items i ON pm.item_id = i.id
+                     JOIN units u ON i.unit_id = u.id
+                     WHERE pm.product_id = ?
+                     ORDER BY i.name"
+                );
+                $stmt->execute([$id]);
+                echo json_encode(['success' => true, 'data' => $stmt->fetchAll()]);
+            } catch (Exception $e) {
+                // Tabel belum ada — return kosong
+                echo json_encode(['success' => true, 'data' => []]);
+            }
+
         }
         break;
 
     case 'POST':
-        // Hanya admin
+        // Simpan BOM (tidak butuh role admin check karena sudah di GET handler)
+        if ($action === 'save_materials') {
+            $id   = (int)($_GET['id'] ?? 0);
+            $body = json_decode(file_get_contents('php://input'), true);
+            $mats = $body['materials'] ?? [];
+
+            if (!$id) {
+                echo json_encode(['success' => false, 'message' => 'Product ID tidak valid']); exit;
+            }
+
+            try {
+                // Buat tabel jika belum ada (tanpa FK agar tidak error)
+                $pdo->exec("CREATE TABLE IF NOT EXISTS `product_materials` (
+                    `id`           INT(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+                    `product_id`   INT(11) UNSIGNED NOT NULL,
+                    `item_id`      INT(11) UNSIGNED NOT NULL,
+                    `qty_per_unit` DECIMAL(12,4) NOT NULL DEFAULT 1,
+                    `notes`        VARCHAR(200) DEFAULT NULL,
+                    `created_at`   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (`id`),
+                    UNIQUE KEY `uk_product_item` (`product_id`, `item_id`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+                // Hapus BOM lama untuk produk ini
+                $pdo->prepare("DELETE FROM product_materials WHERE product_id = ?")->execute([$id]);
+
+                // Insert BOM baru
+                $ins = $pdo->prepare(
+                    "INSERT INTO product_materials (product_id, item_id, qty_per_unit, notes) VALUES (?,?,?,?)"
+                );
+                $count = 0;
+                foreach ($mats as $m) {
+                    $itemId = (int)($m['item_id'] ?? 0);
+                    $qty    = (float)($m['qty_per_unit'] ?? 0);
+                    if ($itemId <= 0 || $qty <= 0) continue;
+                    $ins->execute([$id, $itemId, $qty, $m['notes'] ?? '']);
+                    $count++;
+                }
+
+                echo json_encode([
+                    'success' => true,
+                    'message' => "BOM berhasil disimpan ($count bahan)",
+                    'count'   => $count
+                ]);
+            } catch (Exception $e) {
+                echo json_encode([
+                    'success' => false,
+                    'message' => 'Database error: ' . $e->getMessage()
+                ]);
+            }
+            exit;
+        }
+
+        // Hanya admin untuk tambah produk baru
         if ($_SESSION['user_role'] !== 'admin') {
             echo json_encode(['success' => false, 'message' => 'Hanya admin yang bisa menambah produk']);
             exit;

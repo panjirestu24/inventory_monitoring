@@ -55,7 +55,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login - Sistem Inventory Percetakan</title>
+    <link rel="icon" type="image/png" href="logo.png" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         
@@ -93,14 +95,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         .logo-icon {
             width: 64px;
             height: 64px;
-            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            background: transparent;
             border-radius: 16px;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            font-size: 32px;
             margin-bottom: 16px;
-            box-shadow: 0 8px 24px rgba(99,102,241,0.4);
         }
         
         .logo h1 {
@@ -241,14 +241,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <body>
     <div class="login-container">
         <div class="logo">
-            <div class="logo-icon">🖨️</div>
+            <div class="logo-icon"><img src="logo.png" alt="Logo" style="width:80px;height:80px;object-fit:contain;border-radius:12px"></div>
             <h1>Sistem Inventory</h1>
             <p>Percetakan Modern</p>
         </div>
         
         <?php if ($error): ?>
         <div class="alert">
-            ⚠️ <?= htmlspecialchars($error) ?>
+            <i class="bi bi-exclamation-triangle-fill"></i> <?= htmlspecialchars($error) ?>
         </div>
         <?php endif; ?>
         
@@ -278,14 +278,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
             
             <button type="submit" class="btn-login">
-                🔐 Login Sekarang
+                <i class="bi bi-box-arrow-in-right"></i> Login Sekarang
             </button>
         </form>
         
         <div class="divider"></div>
         
         <div class="demo-info">
-            <h3>🔑 Akun Demo</h3>
+            <h3><i class="bi bi-key-fill"></i> Akun Demo</h3>
             <div class="demo-account">
                 <strong>Admin:</strong> 
                 <span>admin@percetakan.com</span>
@@ -295,7 +295,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <span>operator1@percetakan.com</span>
             </div>
             <div style="margin-top:12px; padding-top:12px; border-top:1px solid rgba(6,182,212,0.2); color:#94a3b8; font-size:11px;">
-                💡 Password semua akun: <strong style="color:#22d3ee">password</strong>
+                <i class="bi bi-lightbulb-fill" style="color:#22d3ee"></i> Password semua akun: <strong style="color:#22d3ee">password</strong>
             </div>
         </div>
         

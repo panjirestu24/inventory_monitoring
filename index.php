@@ -12,7 +12,7 @@ $userInfo = getUserInfo();
 <!--
 ╔══════════════════════════════════════════════════════════════════════════╗
 ║                                                                          ║
-║  🖨️  SISTEM INVENTORY & MONITORING PERCETAKAN                            ║
+║  SISTEM INVENTORY & MONITORING PERCETAKAN                            ║
 ║                                                                          ║
 ║  Deskripsi:                                                              ║
 ║  Website untuk mengelola inventory bahan baku dan monitoring produksi    ║
@@ -51,11 +51,33 @@ $userInfo = getUserInfo();
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>PrintTrack — Inventory & Monitoring Percetakan</title>
+  <link rel="icon" type="image/png" href="logo.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <script src="https://unpkg.com/feather-icons"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
   <link rel="stylesheet" href="css/app.css?v=<?= time() ?>" />
+  <style>
+    /* Date picker icon white */
+    input[type="date"] {
+      color-scheme: dark;
+      color: var(--text-primary);
+    }
+    input[type="date"]::-webkit-calendar-picker-indicator {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='18' rx='2' ry='2'%3E%3C/rect%3E%3Cline x1='16' y1='2' x2='16' y2='6'%3E%3C/line%3E%3Cline x1='8' y1='2' x2='8' y2='6'%3E%3C/line%3E%3Cline x1='3' y1='10' x2='21' y2='10'%3E%3C/line%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: center;
+      background-size: 16px;
+      width: 20px;
+      height: 20px;
+      opacity: 0.8;
+      cursor: pointer;
+    }
+    input[type="date"]::-webkit-calendar-picker-indicator:hover {
+      opacity: 1;
+    }
+  </style>
   <script>
     // Pass PHP variables ke JavaScript
     window.APP_CONFIG = {
@@ -79,7 +101,7 @@ $userInfo = getUserInfo();
   <!-- ========== SIDEBAR ========== -->
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-logo">
-      <div class="logo-icon">🖨️</div>
+      <div class="logo-icon"><img src="logo.png" alt="Logo" style="width:44px;height:44px;object-fit:contain;border-radius:6px"></div>
       <div class="logo-text">
         PrintTrack
         <span>Inventory & Monitoring</span>
@@ -264,7 +286,7 @@ $userInfo = getUserInfo();
           </div>
           <div class="card">
             <div class="card-header">
-              <div class="card-title">⚠️ Stok Kritis</div>
+              <div class="card-title"><i class="bi bi-exclamation-triangle-fill" style="color:var(--warning)"></i> Stok Kritis</div>
               <button class="btn btn-secondary btn-sm" onclick="navigate('items')">Kelola Stok</button>
             </div>
             <div id="dashboard-lowstock">
@@ -374,7 +396,7 @@ $userInfo = getUserInfo();
         <div class="grid-2 mb-6">
           <div class="card" style="border-color:rgba(16,185,129,0.3)">
             <div class="card-header">
-              <div class="card-title text-success">📦 Stok Masuk</div>
+              <div class="card-title text-success"><i class="bi bi-box-arrow-in-down" style="color:var(--success)"></i> Stok Masuk</div>
             </div>
             <div class="form-group">
               <label class="form-label">Pilih Item</label>
@@ -402,7 +424,7 @@ $userInfo = getUserInfo();
           </div>
           <div class="card" style="border-color:rgba(239,68,68,0.3)">
             <div class="card-header">
-              <div class="card-title text-danger">📤 Stok Keluar</div>
+              <div class="card-title text-danger"><i class="bi bi-box-arrow-up" style="color:var(--danger)"></i> Stok Keluar</div>
             </div>
             <div class="form-group">
               <label class="form-label">Pilih Item</label>
@@ -640,7 +662,7 @@ $userInfo = getUserInfo();
             <div id="ni-nota-content" style="display:none;position:sticky;top:90px">
               <div class="card" id="ni-nota-print" style="padding:24px;font-size:13px">
                 <div style="text-align:center;border-bottom:2px solid var(--border);padding-bottom:14px;margin-bottom:14px">
-                  <div style="font-size:18px;font-weight:800;color:var(--primary)">🖨️ PrintTrack</div>
+                <div style="font-size:18px;font-weight:800;color:var(--primary)"><i class="bi bi-printer-fill"></i> PrintTrack</div>
                   <div style="font-size:11px;color:var(--text-muted)">Sistem Inventory & Monitoring Percetakan</div>
                 </div>
                 <div style="text-align:center;margin-bottom:16px">
@@ -714,28 +736,48 @@ $userInfo = getUserInfo();
 
       <!-- ========== ORDERS PAGE ========== -->
       <div class="page" id="page-orders">
-        <div class="filter-bar">
-          <div class="search-box">
+        <!-- Tab Aktif / Riwayat -->
+        <div class="filter-bar" style="margin-bottom:16px">
+          <div class="tabs">
+            <div class="tab-pill active" id="orders-tab-active" onclick="switchOrdersTab('active')">
+              <i data-feather="activity" style="width:13px;height:13px"></i> Aktif
+              <span class="nav-badge" id="badge-orders-active" style="margin-left:4px;background:rgba(99,102,241,0.3);color:#a5b4fc">0</span>
+            </div>
+            <div class="tab-pill" id="orders-tab-history" onclick="switchOrdersTab('history')">
+              <i data-feather="archive" style="width:13px;height:13px"></i> Riwayat
+            </div>
+          </div>
+          <div class="search-box" style="flex:1;min-width:200px">
             <i data-feather="search"></i>
             <input type="text" id="orders-search" placeholder="Cari nomor order, judul, pelanggan..." oninput="filterOrders()" />
           </div>
-          <select class="form-control" id="orders-status-filter" onchange="filterOrders()" style="width:auto">
-            <option value="">Semua Status</option>
-            <option value="pending">Pending</option>
-            <option value="confirmed">Dikonfirmasi</option>
-            <option value="in_progress">Proses</option>
-            <option value="quality_check">QC</option>
-            <option value="completed">Selesai</option>
-            <option value="cancelled">Dibatalkan</option>
-          </select>
           <button class="btn btn-primary btn-sm" onclick="navigate('order-input')">
             <i data-feather="plus-circle"></i> Input Order Baru
           </button>
         </div>
-        <div id="orders-list">
-          <div class="skeleton" style="height:120px;margin-bottom:12px;border-radius:12px"></div>
-          <div class="skeleton" style="height:120px;margin-bottom:12px;border-radius:12px"></div>
-          <div class="skeleton" style="height:120px;border-radius:12px"></div>
+
+        <!-- Tab content: Aktif -->
+        <div id="orders-tab-content-active">
+          <div id="orders-list">
+            <div class="skeleton" style="height:120px;margin-bottom:12px;border-radius:12px"></div>
+            <div class="skeleton" style="height:120px;margin-bottom:12px;border-radius:12px"></div>
+            <div class="skeleton" style="height:120px;border-radius:12px"></div>
+          </div>
+        </div>
+
+        <!-- Tab content: Riwayat -->
+        <div id="orders-tab-content-history" style="display:none">
+          <div style="margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap">
+            <select class="form-control" id="orders-history-filter" onchange="loadOrdersHistory()" style="width:auto">
+              <option value="completed">Selesai</option>
+              <option value="cancelled">Dibatalkan</option>
+              <option value="">Semua Riwayat</option>
+            </select>
+          </div>
+          <div id="orders-history-list">
+            <div class="skeleton" style="height:100px;margin-bottom:12px;border-radius:12px"></div>
+            <div class="skeleton" style="height:100px;border-radius:12px"></div>
+          </div>
         </div>
       </div>
 
@@ -743,9 +785,6 @@ $userInfo = getUserInfo();
       <div class="page" id="page-machines">
         <div class="machine-grid" id="machines-page-grid"></div>
       </div>
-
-      <!-- ========== SUPPLIERS PAGE ========== -->
-      <div class="page" id="page-suppliers" style="display:none"></div>
 
       <!-- ========== CUSTOMERS PAGE ========== -->
       <div class="page" id="page-customers">
@@ -829,26 +868,40 @@ $userInfo = getUserInfo();
 
       <!-- ========== DELIVERIES PAGE ========== -->
       <div class="page" id="page-deliveries">
-        <div class="filter-bar">
-          <div class="search-box">
+        <div class="filter-bar" style="margin-bottom:16px">
+          <div class="tabs">
+            <div class="tab-pill active" id="deliveries-tab-active" onclick="switchDeliveriesTab('active')">
+              <i data-feather="truck" style="width:13px;height:13px"></i> Aktif
+              <span class="nav-badge" id="badge-deliveries-active" style="margin-left:4px;background:rgba(6,182,212,0.3);color:#22d3ee">0</span>
+            </div>
+            <div class="tab-pill" id="deliveries-tab-history" onclick="switchDeliveriesTab('history')">
+              <i data-feather="archive" style="width:13px;height:13px"></i> Riwayat
+            </div>
+          </div>
+          <div class="search-box" style="flex:1;min-width:200px">
             <i data-feather="search"></i>
             <input type="text" id="deliveries-search" placeholder="Cari no. order, pelanggan, kota tujuan..." oninput="filterDeliveries()" />
           </div>
-          <select class="form-control" id="deliveries-status-filter" onchange="filterDeliveries()" style="width:auto">
-            <option value="">Semua Status</option>
-            <option value="prepared">Disiapkan</option>
-            <option value="shipping">Dalam Pengiriman</option>
-            <option value="arrived">Tiba di Tujuan</option>
-            <option value="received">Diterima</option>
-          </select>
           <a href="track.php" target="_blank" class="btn btn-secondary btn-sm">
             <i data-feather="external-link"></i> Halaman Tracking
           </a>
         </div>
-        <div id="deliveries-list">
-          <div class="skeleton" style="height:140px;margin-bottom:12px;border-radius:12px"></div>
-          <div class="skeleton" style="height:140px;margin-bottom:12px;border-radius:12px"></div>
-          <div class="skeleton" style="height:140px;border-radius:12px"></div>
+
+        <!-- Tab: Aktif -->
+        <div id="deliveries-tab-content-active">
+          <div id="deliveries-list">
+            <div class="skeleton" style="height:140px;margin-bottom:12px;border-radius:12px"></div>
+            <div class="skeleton" style="height:140px;margin-bottom:12px;border-radius:12px"></div>
+            <div class="skeleton" style="height:140px;border-radius:12px"></div>
+          </div>
+        </div>
+
+        <!-- Tab: Riwayat -->
+        <div id="deliveries-tab-content-history" style="display:none">
+          <div id="deliveries-history-list">
+            <div class="skeleton" style="height:100px;margin-bottom:12px;border-radius:12px"></div>
+            <div class="skeleton" style="height:100px;border-radius:12px"></div>
+          </div>
         </div>
       </div>
 
@@ -999,7 +1052,7 @@ $userInfo = getUserInfo();
 <div class="modal-overlay" id="modal-new-delivery">
   <div class="modal">
     <div class="modal-header">
-      <div class="modal-title">🚚 Buat Data Pengiriman</div>
+      <div class="modal-title"><i class="bi bi-truck" style="color:var(--accent)"></i> Buat Data Pengiriman</div>
       <button class="modal-close" onclick="closeModal('modal-new-delivery')"><i data-feather="x"></i></button>
     </div>
     <input type="hidden" id="new-delivery-order-id" />
@@ -1092,6 +1145,35 @@ $userInfo = getUserInfo();
 </div>
 
 <!-- Modal Add/Edit User -->
+<div class="modal-overlay" id="modal-bom">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title"><i data-feather="layers"></i> Kelola Bahan Baku Produk</div>
+        <div id="bom-product-name" style="font-size:12px;color:var(--text-muted);margin-top:4px"></div>
+      </div>
+      <button class="modal-close" onclick="closeModal('modal-bom')"><i data-feather="x"></i></button>
+    </div>
+    <input type="hidden" id="bom-product-id">
+    <div style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.2);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:16px;font-size:12px;color:var(--text-secondary)">
+      <i data-feather="info" style="width:14px;height:14px;vertical-align:middle;margin-right:6px"></i>
+      Isi jumlah bahan baku yang dipakai <strong>per 1 pcs</strong> produk ini.
+      Stok akan otomatis berkurang saat order dibuat.
+    </div>
+    <div id="bom-list" style="margin-bottom:16px">
+      <!-- Diisi JS -->
+    </div>
+    <button class="btn btn-secondary btn-sm" onclick="bomTambahBaris()" style="margin-bottom:16px">
+      <i data-feather="plus"></i> Tambah Bahan
+    </button>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-secondary" onclick="closeModal('modal-bom')">Batal</button>
+      <button class="btn btn-primary" onclick="simpanBOM()"><i data-feather="save"></i> Simpan BOM</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Add/Edit User -->
 <div class="modal-overlay" id="modal-add-user">
   <div class="modal">
     <div class="modal-header">
@@ -1138,8 +1220,8 @@ $userInfo = getUserInfo();
       <div style="background:var(--bg-base);border-radius:var(--radius-sm);padding:12px;margin-bottom:16px;font-size:12px;color:var(--text-muted)">
         <strong style="color:var(--text-secondary)">Info Hak Akses:</strong>
         <div style="margin-top:6px;display:grid;gap:4px">
-          <div>👑 <strong>Admin</strong> — Akses penuh termasuk kelola user</div>
-          <div>⚙️ <strong>Operator</strong> — Bisa tambah & edit data, tidak bisa hapus</div>
+          <div><i class="bi bi-shield-fill-check" style="color:#a5b4fc"></i> <strong>Admin</strong> — Akses penuh termasuk kelola user</div>
+          <div><i class="bi bi-gear-fill" style="color:#22d3ee"></i> <strong>Operator</strong> — Bisa tambah &amp; edit data, tidak bisa hapus</div>
         </div>
       </div>
       <div class="modal-footer">

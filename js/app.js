@@ -78,7 +78,7 @@ function applyRoleBasedUI() {
   
   // Kalau operator, hide tombol hapus aja
   if (role === 'operator') {
-    console.log('⚙️ Mode Operator: Bisa tambah & edit, tidak bisa hapus');
+    console.log('Mode Operator: Bisa tambah & edit, tidak bisa hapus');
     hideElements('button[onclick*="delete"]');
     hideElements('button[onclick*="Hapus"]');
     hideElements('.btn-danger[onclick*="delete"]');
@@ -86,7 +86,7 @@ function applyRoleBasedUI() {
   
   // Kalau admin, tampilkan badge admin
   if (role === 'admin') {
-    console.log('👑 Mode Admin: Full Access');
+    console.log('Mode Admin: Full Access');
     const headerActions = document.querySelector('.header-actions');
     if (headerActions) {
       const badge = document.createElement('div');
@@ -175,8 +175,8 @@ function navigate(page) {
     case 'items':          loadItems(); break;
     case 'stock-mutation': loadStockMutationPage(); break;
     case 'order-input':    loadOrderInputPage(); break;
-    case 'orders':         loadOrders(); break;
-    case 'deliveries':     loadDeliveries(); break;
+    case 'orders':         currentOrdersTab = 'active'; loadOrders(); break;
+    case 'deliveries':     currentDeliveriesTab = 'active'; loadDeliveries(); break;
     case 'machines':       loadMachinesPage(); break;
     case 'customers':      loadCustomers(); break;
     case 'products':       loadProducts(); break;
@@ -303,7 +303,7 @@ function renderDashboardMachines(machines) {
       <div style="width:10px;height:10px;border-radius:50%;background:${machineStatusColor(m.status)};flex-shrink:0;box-shadow:0 0 6px ${machineStatusColor(m.status)}"></div>
       <div style="flex:1">
         <div style="font-size:13px;font-weight:600">${m.name}</div>
-        <div style="font-size:11px;color:var(--text-muted)">${m.current_job ? `🔄 ${m.current_job}` : 'Tidak ada pekerjaan'}</div>
+        <div style="font-size:11px;color:var(--text-muted)">${m.current_job ? `<i class="bi bi-arrow-repeat"></i> ${m.current_job}` : 'Tidak ada pekerjaan'}</div>
       </div>
       <span class="badge badge-${m.status}">${statusLabel(m.status)}</span>
     </div>
@@ -312,19 +312,90 @@ function renderDashboardMachines(machines) {
 
 function renderDashboardLowStock(items) {
   const el = document.getElementById('dashboard-lowstock');
-  if (!items?.length) { el.innerHTML = '<div class="text-sm text-success" style="padding:16px">✅ Semua stok dalam kondisi aman</div>'; return; }
-  el.innerHTML = items.map(i => {
-    const pct = Math.min(100, (i.stock / i.min_stock) * 100);
-    const cls = pct <= 25 ? 'danger' : pct <= 75 ? 'warning' : 'success';
-    return `
-      <div style="margin-bottom:12px">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-          <span style="font-size:12px;font-weight:600">${i.name}</span>
-          <span style="font-size:11px;color:var(--text-muted)">${parseFloat(i.stock)} / ${parseFloat(i.min_stock)} ${i.unit}</span>
+  if (!items?.length) {
+    el.innerHTML = `
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 16px;gap:12px">
+        <div style="width:52px;height:52px;border-radius:50%;background:rgba(16,185,129,0.12);border:2px solid rgba(16,185,129,0.3);display:flex;align-items:center;justify-content:center">
+          <i class="bi bi-check-lg" style="font-size:22px;color:var(--success)"></i>
         </div>
-        <div class="progress-bar"><div class="progress-fill ${cls}" style="width:${pct}%"></div></div>
-      </div>
-    `;
+        <div style="text-align:center">
+          <div style="font-weight:700;color:var(--success);font-size:14px;margin-bottom:4px">Semua Stok Aman</div>
+          <div style="font-size:12px;color:var(--text-muted)">Tidak ada item yang perlu restock</div>
+        </div>
+      </div>`;
+    return;
+  }
+
+  el.innerHTML = items.map((i, idx) => {
+    const pct     = i.min_stock > 0 ? Math.min(100, (i.stock / i.min_stock) * 100) : 100;
+    const isEmpty = parseFloat(i.stock) === 0;
+    const isCrit  = pct <= 25;
+    const isWarn  = pct > 25 && pct <= 75;
+
+    const barColor  = isEmpty ? '#ef4444' : isCrit ? '#ef4444' : isWarn ? '#f59e0b' : '#10b981';
+    const bgColor   = isEmpty ? 'rgba(239,68,68,0.08)' : isCrit ? 'rgba(239,68,68,0.08)' : 'rgba(245,158,11,0.08)';
+    const bdColor   = isEmpty ? 'rgba(239,68,68,0.2)'  : isCrit ? 'rgba(239,68,68,0.2)'  : 'rgba(245,158,11,0.2)';
+    const label     = isEmpty ? 'HABIS' : isCrit ? 'KRITIS' : 'RENDAH';
+    const labelColor= isEmpty ? '#f87171' : isCrit ? '#f87171' : '#fbbf24';
+    const icon      = isEmpty ? 'bi-x-circle-fill' : 'bi-exclamation-triangle-fill';
+
+    return `
+      <div style="
+        display:flex;align-items:center;gap:12px;
+        padding:12px 14px;margin-bottom:8px;
+        background:${bgColor};
+        border:1px solid ${bdColor};
+        border-radius:10px;
+        transition:all 0.2s
+      " onmouseover="this.style.borderColor='${barColor}';this.style.transform='translateX(3px)'"
+         onmouseout="this.style.borderColor='${bdColor}';this.style.transform='translateX(0)'">
+
+        <!-- Icon -->
+        <div style="
+          width:36px;height:36px;flex-shrink:0;
+          border-radius:8px;
+          background:${isEmpty||isCrit?'rgba(239,68,68,0.15)':'rgba(245,158,11,0.15)'};
+          display:flex;align-items:center;justify-content:center
+        ">
+          <i class="bi ${icon}" style="font-size:16px;color:${labelColor}"></i>
+        </div>
+
+        <!-- Info -->
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px">
+            <div style="font-size:13px;font-weight:700;color:var(--text-primary);
+              white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px"
+              title="${i.name}">${i.name}</div>
+            <span style="
+              font-size:10px;font-weight:700;letter-spacing:0.5px;
+              padding:2px 7px;border-radius:20px;flex-shrink:0;margin-left:6px;
+              background:${isEmpty||isCrit?'rgba(239,68,68,0.15)':'rgba(245,158,11,0.15)'};
+              color:${labelColor};border:1px solid ${bdColor}
+            ">${label}</span>
+          </div>
+
+          <!-- Progress bar -->
+          <div style="height:5px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden;margin-bottom:5px">
+            <div style="
+              height:100%;width:${Math.max(pct,2)}%;
+              background:${barColor};
+              border-radius:3px;
+              box-shadow:0 0 6px ${barColor}80;
+              transition:width 0.6s ease
+            "></div>
+          </div>
+
+          <!-- Stock numbers -->
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span style="font-size:11px;color:var(--text-muted)">
+              Stok: <strong style="color:${labelColor}">${parseFloat(i.stock)} ${i.unit}</strong>
+            </span>
+            <span style="font-size:11px;color:var(--text-muted)">
+              Min: ${parseFloat(i.min_stock)} ${i.unit}
+            </span>
+          </div>
+        </div>
+      </div>`;
   }).join('');
 }
 
@@ -401,6 +472,8 @@ function renderStockChart(data) {
 // MONITORING
 // ============================================================
 function startMonitorInterval() {
+  // Clear dulu jika sudah ada (hindari interval leak)
+  if (monitorInterval) { clearInterval(monitorInterval); monitorInterval = null; }
   loadMonitoring();
   monitorInterval = setInterval(loadMonitoring, 15000);
 }
@@ -427,12 +500,12 @@ function renderMachineGrid(machines, containerId) {
         </div>
         <span class="badge badge-${m.status}">${statusLabel(m.status)}</span>
       </div>
-      ${m.current_job ? `<div class="machine-job">🔄 <strong>${m.order_number}</strong><br><span>${m.current_job}</span></div>` : '<div class="machine-job" style="color:var(--text-muted)">Tidak ada pekerjaan aktif</div>'}
-      ${m.operator_name ? `<div style="font-size:11px;color:var(--text-muted);margin-top:6px">👤 ${m.operator_name}</div>` : ''}
+      ${m.current_job ? `<div class="machine-job"><i class="bi bi-arrow-repeat"></i> <strong>${m.order_number}</strong><br><span>${m.current_job}</span></div>` : '<div class="machine-job" style="color:var(--text-muted)">Tidak ada pekerjaan aktif</div>'}
+      ${m.operator_name ? `<div style="font-size:11px;color:var(--text-muted);margin-top:6px"><i class="bi bi-person-fill"></i> ${m.operator_name}</div>` : ''}
       <div style="display:flex;gap:8px;margin-top:14px">
-        <button class="btn btn-secondary btn-sm" onclick="changeMachineStatus(${m.id},'active')">▶ Aktif</button>
-        <button class="btn btn-warning btn-sm" onclick="changeMachineStatus(${m.id},'maintenance')">🔧 Maintenance</button>
-        <button class="btn btn-secondary btn-sm" onclick="changeMachineStatus(${m.id},'idle')">⏸ Idle</button>
+        <button class="btn btn-secondary btn-sm" onclick="changeMachineStatus(${m.id},'active')"><i class="bi bi-play-fill"></i> Aktif</button>
+        <button class="btn btn-warning btn-sm" onclick="changeMachineStatus(${m.id},'maintenance')"><i class="bi bi-tools"></i> Maintenance</button>
+        <button class="btn btn-secondary btn-sm" onclick="changeMachineStatus(${m.id},'idle')"><i class="bi bi-pause-fill"></i> Idle</button>
       </div>
     </div>
   `).join('');
@@ -596,7 +669,6 @@ async function submitAddItem(e) {
     name: document.getElementById('item-name').value,
     category_id: document.getElementById('item-category').value,
     unit_id: document.getElementById('item-unit').value,
-    supplier_id: null,
     location: document.getElementById('item-location').value,
     stock: document.getElementById('item-stock').value,
     min_stock: document.getElementById('item-min-stock').value,
@@ -749,6 +821,9 @@ function renderProductsTable(products) {
         <div style="display:flex;gap:4px">
           <button class="btn btn-secondary btn-sm btn-icon" onclick="openEditProductModal(${p.id})" title="Edit">
             <i data-feather="edit-2"></i>
+          </button>
+          <button class="btn btn-warning btn-sm btn-icon" onclick="openBOMModal(${p.id},'${p.name.replace(/'/g,"\\'")}')" title="Kelola Bahan Baku">
+            <i data-feather="layers"></i>
           </button>
           <button class="btn btn-danger btn-sm btn-icon" onclick="deleteProduct(${p.id})" title="Nonaktifkan">
             <i data-feather="trash-2"></i>
@@ -961,7 +1036,8 @@ function niEsc(s) {
 }
 
 // ---- Array items pesanan ----
-let niItems = []; // [{id, name, qty, price, note}]
+let niItems = [];          // [{id, name, qty, price, note}]
+let niOrderSubmitted = false; // flag anti double-submit
 
 // ---- Tambah item dari dropdown ----
 function niTambahItem() {
@@ -1077,6 +1153,12 @@ function niHapusItem(idx) {
 async function niSimpanOrder() {
   if (!checkPermission('create')) return;
 
+  // Cegah double submit
+  if (niOrderSubmitted) {
+    showToast('Order sudah disimpan. Klik "Order Baru" untuk membuat order berikutnya.', 'info');
+    return;
+  }
+
   const name  = document.getElementById('ni-cust-name').value.trim();
   const phone = document.getElementById('ni-cust-phone').value.trim();
   const due   = document.getElementById('ni-due').value;
@@ -1132,9 +1214,26 @@ async function niSimpanOrder() {
 
   if (res?.success) {
     showToast('Order ' + res.order_number + ' berhasil disimpan!', 'success');
+    if (res.stock_warnings?.length) {
+      setTimeout(() => res.stock_warnings.forEach(w => showToast(w, 'warning')), 800);
+    }
+    // Set flag anti double-submit
+    niOrderSubmitted = true;
+    // Ubah tombol simpan jadi disabled dengan teks jelas
+    const btnSimpan = document.getElementById('ni-btn-simpan');
+    if (btnSimpan) {
+      btnSimpan.disabled = true;
+      btnSimpan.style.opacity = '0.5';
+      btnSimpan.innerHTML = '<i data-feather="check-circle"></i> Order Tersimpan';
+      feather.replace();
+    }
     niTampilkanNota(res.data, res.order_number);
   } else {
-    showToast(res?.message || 'Gagal menyimpan order', 'error');
+    if (res?.stock_errors?.length) {
+      niTampilkanErrorStok(res.message, res.stock_errors);
+    } else {
+      showToast(res?.message || 'Gagal menyimpan order', 'error');
+    }
   }
 }
 
@@ -1206,8 +1305,57 @@ function niTampilkanNota(o, orderNum) {
   }
 }
 
-function niResetForm() {
-  ['ni-cust-name','ni-cust-phone','ni-cust-city','ni-cust-address',
+// Tampilkan notifikasi stok tidak cukup (modal inline)
+function niTampilkanErrorStok(message, errors) {
+  // Hapus alert lama kalau ada
+  const old = document.getElementById('ni-stock-error');
+  if (old) old.remove();
+
+  const errHtml = errors.map(e => `
+    <div style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;
+      background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);
+      border-radius:8px;margin-bottom:8px">
+      <i class="bi bi-x-circle-fill" style="color:var(--danger);flex-shrink:0;margin-top:1px"></i>
+      <span style="font-size:13px;color:var(--text-primary)">${e}</span>
+    </div>`).join('');
+
+  const alertEl = document.createElement('div');
+  alertEl.id = 'ni-stock-error';
+  alertEl.style.cssText = `
+    background:rgba(239,68,68,0.06);
+    border:1.5px solid rgba(239,68,68,0.35);
+    border-radius:var(--radius);
+    padding:16px;
+    margin-bottom:20px;
+    animation:fadeIn 0.3s ease;
+  `;
+  alertEl.innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+      <i class="bi bi-exclamation-triangle-fill" style="font-size:18px;color:var(--danger)"></i>
+      <div>
+        <div style="font-weight:700;color:var(--danger);font-size:14px">Order Gagal — Stok Tidak Mencukupi</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:2px">${message}</div>
+      </div>
+      <button onclick="document.getElementById('ni-stock-error').remove()"
+        style="margin-left:auto;background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:18px;line-height:1">×</button>
+    </div>
+    ${errHtml}
+    <div style="font-size:12px;color:var(--text-muted);margin-top:10px">
+      <i class="bi bi-info-circle"></i>
+      Tambahkan stok bahan baku di halaman <strong>Mutasi Stok</strong> terlebih dahulu.
+    </div>
+  `;
+
+  // Sisipkan di atas form bahan baku (sebelum form-nota-grid)
+  const grid = document.getElementById('order-input-grid');
+  if (grid) grid.parentNode.insertBefore(alertEl, grid);
+
+  // Scroll ke atas agar terlihat
+  alertEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  showToast('Order dibatalkan — stok bahan baku tidak mencukupi!', 'error');
+}
+
+function niResetForm() {  ['ni-cust-name','ni-cust-phone','ni-cust-city','ni-cust-address',
    'ni-cust-search','ni-notes'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
@@ -1238,7 +1386,20 @@ function niResetForm() {
   if (ph) ph.style.display = 'block';
   if (ct) ct.style.display = 'none';
 
+  // Reset flag & tombol simpan
+  niOrderSubmitted = false;
+  const btnSimpan = document.getElementById('ni-btn-simpan');
+  if (btnSimpan) {
+    btnSimpan.disabled = false;
+    btnSimpan.style.opacity = '1';
+    btnSimpan.innerHTML = '<i data-feather="save"></i> Simpan & Tampilkan Nota';
+    feather.replace();
+  }
+
   window.scrollTo({top:0, behavior:'smooth'});
+  // Hapus alert stok jika ada
+  const errEl = document.getElementById('ni-stock-error');
+  if (errEl) errEl.remove();
 }
 
 // ============================================================
@@ -1254,19 +1415,65 @@ const ORDER_STEPS = [
 ];
 const ORDER_STEP_KEYS = ORDER_STEPS.map(s => s.key);
 
+// Tab aktif sekarang
+let currentOrdersTab = 'active';
+
+function switchOrdersTab(tab) {
+  currentOrdersTab = tab;
+  // Ganti active tab pill
+  document.getElementById('orders-tab-active').classList.toggle('active', tab === 'active');
+  document.getElementById('orders-tab-history').classList.toggle('active', tab === 'history');
+  // Tampilkan konten yang sesuai
+  document.getElementById('orders-tab-content-active').style.display  = tab === 'active'  ? 'block' : 'none';
+  document.getElementById('orders-tab-content-history').style.display = tab === 'history' ? 'block' : 'none';
+  if (tab === 'history') loadOrdersHistory();
+  feather.replace();
+}
+
 async function loadOrders() {
-  const searchEl = document.getElementById('orders-search');
-  const statusEl = document.getElementById('orders-status-filter');
-  const search = searchEl ? searchEl.value : '';
-  const status = statusEl ? statusEl.value : '';
-  const params = new URLSearchParams({ action: 'list', search, status });
-  const data   = await apiFetch(`${API}orders.php?${params}`);
-  allOrders    = data?.data || [];
+  const search = document.getElementById('orders-search')?.value || '';
+  // Hanya load status AKTIF (bukan completed/cancelled)
+  const activeStatuses = ['pending', 'confirmed', 'in_progress', 'quality_check'];
+  const params = new URLSearchParams({ action: 'list', search });
+  // Tambahkan filter multi-status
+  activeStatuses.forEach(s => params.append('statuses[]', s));
+  const data = await apiFetch(`${API}orders.php?${params}`);
+  allOrders  = data?.data || [];
+
+  // Update badge jumlah aktif
+  const badge = document.getElementById('badge-orders-active');
+  if (badge) badge.textContent = allOrders.length;
+
   renderOrdersList(allOrders);
   feather.replace();
 }
 
-function filterOrders() { loadOrders(); }
+async function loadOrdersHistory() {
+  const statusFilter = document.getElementById('orders-history-filter')?.value || '';
+  const search       = document.getElementById('orders-search')?.value || '';
+  const params       = new URLSearchParams({ action: 'list', search });
+  if (statusFilter) {
+    params.append('statuses[]', statusFilter);
+  } else {
+    params.append('statuses[]', 'completed');
+    params.append('statuses[]', 'cancelled');
+  }
+  const data = await apiFetch(`${API}orders.php?${params}`);
+  const orders = data?.data || [];
+  const el = document.getElementById('orders-history-list');
+  if (!el) return;
+  if (!orders.length) {
+    el.innerHTML = `<div class="card"><div class="empty-state"><i data-feather="archive"></i><h3>Belum ada riwayat</h3><p>Order yang selesai atau dibatalkan akan muncul di sini</p></div></div>`;
+    feather.replace(); return;
+  }
+  el.innerHTML = orders.map(o => renderOrderCard(o)).join('');
+  feather.replace();
+}
+
+function filterOrders() {
+  if (currentOrdersTab === 'history') loadOrdersHistory();
+  else loadOrders();
+}
 
 function renderOrdersList(orders) {
   const el = document.getElementById('orders-list');
@@ -1344,7 +1551,7 @@ function renderOrderCard(o) {
         </div>
       </div>
       <div class="status-stepper">${stepperHtml}</div>
-      ${isCancelled ? '<div style="font-size:12px;color:var(--danger);margin-top:8px">⛔ Order dibatalkan</div>' : ''}
+      ${isCancelled ? '<div style="font-size:12px;color:var(--danger);margin-top:8px"><i class="bi bi-x-octagon-fill"></i> Order dibatalkan</div>' : ''}
     </div>`;
 }
 
@@ -1357,19 +1564,54 @@ async function updateOrderStatus(orderId, newStatus, machineId) {
   });
   if (res?.success) {
     showToast(`Status order → ${label}`, 'success');
-    // Update hanya card ini tanpa reload semua
     const order = allOrders.find(o => o.id == orderId);
     if (order) {
       order.status = newStatus;
       const card = document.getElementById(`order-card-${orderId}`);
-      if (card) {
+
+      // Jika status final (completed/cancelled) — animasi fade lalu pindah ke riwayat
+      const isFinal = newStatus === 'completed' || newStatus === 'cancelled';
+      if (card && isFinal) {
+        // Update tampilan stepper dulu
+        card.outerHTML = renderOrderCard(order);
+        feather.replace();
+
+        const updatedCard = document.getElementById(`order-card-${orderId}`);
+        if (updatedCard) {
+          // Polling 2 detik lalu fade-out
+          setTimeout(() => {
+            updatedCard.classList.add('order-card-fadeout');
+            // Setelah animasi selesai (1.8s), hapus dari DOM dan update allOrders
+            setTimeout(() => {
+              updatedCard.remove();
+              // Hapus dari array aktif
+              allOrders = allOrders.filter(o => o.id != orderId);
+              // Update badge tab
+              const badgeTab = document.getElementById('badge-orders-active');
+              if (badgeTab) badgeTab.textContent = allOrders.length;
+              // Tampilkan pesan kalau sudah kosong
+              const list = document.getElementById('orders-list');
+              if (list && !list.querySelector('.order-card')) {
+                list.innerHTML = `<div class="card"><div class="empty-state">
+                  <i data-feather="check-circle" style="stroke:var(--success)"></i>
+                  <h3>Semua order selesai diproses</h3>
+                  <p>Lihat <button onclick="switchOrdersTab('history')" style="background:none;border:none;color:var(--primary);cursor:pointer;font-size:13px;text-decoration:underline">Tab Riwayat</button> untuk order yang sudah selesai</p>
+                </div></div>`;
+                feather.replace();
+              }
+            }, 1900);
+          }, 2000); // Tunggu 2 detik baru mulai fade
+        }
+      } else if (card) {
+        // Status belum final — update card biasa
         card.outerHTML = renderOrderCard(order);
         feather.replace();
       }
-    }
-    // Jika selesai, tawarkan buat pengiriman
-    if (newStatus === 'completed') {
-      setTimeout(() => openNewDeliveryModal(orderId), 300);
+
+      // Jika selesai, tawarkan buat pengiriman
+      if (newStatus === 'completed') {
+        setTimeout(() => openNewDeliveryModal(orderId), 2200);
+      }
     }
   } else {
     showToast(res?.message || 'Gagal update status', 'error');
@@ -1433,23 +1675,59 @@ const DELIV_STEPS = [
 ];
 const DELIV_STEP_KEYS = DELIV_STEPS.map(s => s.key);
 
-async function loadDeliveries() {
-  const searchEl = document.getElementById('deliveries-search');
-  const statusEl = document.getElementById('deliveries-status-filter');
-  const search = searchEl ? searchEl.value : '';
-  const status = statusEl ? statusEl.value : '';
-  const params = new URLSearchParams({ action: 'list', search, status });
-  const data   = await apiFetch(`${API}deliveries.php?${params}`);
-  allDeliveries = data?.data || [];
-  renderDeliveriesList(allDeliveries);
+// Tab deliveries aktif sekarang
+let currentDeliveriesTab = 'active';
 
-  const inTransit = allDeliveries.filter(d => d.status === 'shipping').length;
-  const badge = document.getElementById('badge-deliveries');
-  if (badge) { badge.textContent = inTransit; badge.style.display = inTransit > 0 ? 'inline' : 'none'; }
+function switchDeliveriesTab(tab) {
+  currentDeliveriesTab = tab;
+  document.getElementById('deliveries-tab-active').classList.toggle('active', tab === 'active');
+  document.getElementById('deliveries-tab-history').classList.toggle('active', tab === 'history');
+  document.getElementById('deliveries-tab-content-active').style.display  = tab === 'active'  ? 'block' : 'none';
+  document.getElementById('deliveries-tab-content-history').style.display = tab === 'history' ? 'block' : 'none';
+  if (tab === 'history') loadDeliveriesHistory();
   feather.replace();
 }
 
-function filterDeliveries() { loadDeliveries(); }
+async function loadDeliveries() {
+  const search = document.getElementById('deliveries-search')?.value || '';
+  // Hanya load status AKTIF (bukan received)
+  const activeStatuses = ['prepared', 'shipping', 'arrived'];
+  const params = new URLSearchParams({ action: 'list', search });
+  activeStatuses.forEach(s => params.append('statuses[]', s));
+  const data = await apiFetch(`${API}deliveries.php?${params}`);
+  allDeliveries = data?.data || [];
+
+  // Badge navbar dan tab
+  const inTransit = allDeliveries.filter(d => d.status === 'shipping').length;
+  const badgeNav = document.getElementById('badge-deliveries');
+  if (badgeNav) { badgeNav.textContent = inTransit; badgeNav.style.display = inTransit > 0 ? 'inline' : 'none'; }
+  const badgeTab = document.getElementById('badge-deliveries-active');
+  if (badgeTab) badgeTab.textContent = allDeliveries.length;
+
+  renderDeliveriesList(allDeliveries);
+  feather.replace();
+}
+
+async function loadDeliveriesHistory() {
+  const search = document.getElementById('deliveries-search')?.value || '';
+  const params = new URLSearchParams({ action: 'list', search });
+  params.append('statuses[]', 'received');
+  const data   = await apiFetch(`${API}deliveries.php?${params}`);
+  const delivs = data?.data || [];
+  const el     = document.getElementById('deliveries-history-list');
+  if (!el) return;
+  if (!delivs.length) {
+    el.innerHTML = `<div class="card"><div class="empty-state"><i data-feather="archive"></i><h3>Belum ada riwayat pengiriman</h3><p>Pengiriman yang sudah diterima akan muncul di sini</p></div></div>`;
+    feather.replace(); return;
+  }
+  el.innerHTML = delivs.map(d => renderDeliveryCard(d)).join('');
+  feather.replace();
+}
+
+function filterDeliveries() {
+  if (currentDeliveriesTab === 'history') loadDeliveriesHistory();
+  else loadDeliveries();
+}
 
 function renderDeliveriesList(deliveries) {
   const el = document.getElementById('deliveries-list');
@@ -1505,7 +1783,7 @@ function renderDeliveryCard(d) {
       <img class="proof-preview" id="proof-preview-${d.id}" />
       <div class="proof-upload-note">
         JPG / PNG / WEBP, maks. 5MB<br>
-        <span style="color:var(--warning);font-size:10px">⚠️ Foto wajib sebelum konfirmasi diterima</span>
+      <div style="font-size:11px;color:var(--warning)"><i class="bi bi-exclamation-triangle-fill"></i> Foto wajib sebelum konfirmasi diterima</div>
       </div>
       <button class="btn-confirm-received" id="btn-received-${d.id}"
         onclick="submitReceived(${d.id})" disabled>
@@ -1519,7 +1797,7 @@ function renderDeliveryCard(d) {
       <img src="uploads/proof/${d.proof_image}" class="proof-img-thumb"
         onclick="openLightbox('uploads/proof/${d.proof_image}')"
         title="Klik untuk perbesar" />
-      <span style="font-size:12px;color:var(--success)">✅ Bukti pengiriman tersedia</span>
+      <span style="font-size:12px;color:var(--success)"><i class="bi bi-check-circle-fill"></i> Bukti pengiriman tersedia</span>
     </div>` : '';
 
   return `
@@ -1550,7 +1828,40 @@ async function updateDeliveryStatus(id, newStatus) {
   const res = await apiPut(`${API}deliveries.php`, { id, status: newStatus });
   if (res?.success) {
     showToast(`Pengiriman → ${deliveryStatusLabel(newStatus)}`, 'success');
-    loadDeliveries();
+    const deliv = allDeliveries.find(d => d.id == id);
+    if (deliv) {
+      deliv.status = newStatus;
+      const card = document.getElementById(`delivery-card-${id}`);
+      // received = status final → animasi fade lalu pindah riwayat
+      if (card && newStatus === 'received') {
+        card.outerHTML = renderDeliveryCard(deliv);
+        feather.replace();
+        const updated = document.getElementById(`delivery-card-${id}`);
+        if (updated) {
+          setTimeout(() => {
+            updated.classList.add('order-card-fadeout');
+            setTimeout(() => {
+              updated.remove();
+              allDeliveries = allDeliveries.filter(d => d.id != id);
+              const badgeTab = document.getElementById('badge-deliveries-active');
+              if (badgeTab) badgeTab.textContent = allDeliveries.length;
+              const list = document.getElementById('deliveries-list');
+              if (list && !list.querySelector('.order-card')) {
+                list.innerHTML = `<div class="card"><div class="empty-state">
+                  <i data-feather="check-circle" style="stroke:var(--success)"></i>
+                  <h3>Semua pengiriman selesai</h3>
+                  <p>Lihat <button onclick="switchDeliveriesTab('history')" style="background:none;border:none;color:var(--primary);cursor:pointer;font-size:13px;text-decoration:underline">Tab Riwayat</button> untuk pengiriman yang sudah diterima</p>
+                </div></div>`;
+                feather.replace();
+              }
+            }, 1900);
+          }, 2000);
+        }
+      } else if (card) {
+        card.outerHTML = renderDeliveryCard(deliv);
+        feather.replace();
+      }
+    }
   } else {
     showToast(res?.message || 'Gagal update status pengiriman', 'error');
   }
@@ -1598,8 +1909,39 @@ async function submitReceived(id) {
     });
     const data = await res.json();
     if (data.success) {
-      showToast('Pengiriman dikonfirmasi diterima ✅', 'success');
-      loadDeliveries();
+      showToast('Pengiriman dikonfirmasi diterima', 'success');
+      // Update card dulu, lalu fade-out setelah 2 detik
+      const deliv = allDeliveries.find(d => d.id == id);
+      if (deliv) {
+        deliv.status   = 'received';
+        deliv.proof_image = data.proof_image;
+        const card = document.getElementById(`delivery-card-${id}`);
+        if (card) {
+          card.outerHTML = renderDeliveryCard(deliv);
+          feather.replace();
+          const updated = document.getElementById(`delivery-card-${id}`);
+          if (updated) {
+            setTimeout(() => {
+              updated.classList.add('order-card-fadeout');
+              setTimeout(() => {
+                updated.remove();
+                allDeliveries = allDeliveries.filter(d => d.id != id);
+                const badgeTab = document.getElementById('badge-deliveries-active');
+                if (badgeTab) badgeTab.textContent = allDeliveries.length;
+                const list = document.getElementById('deliveries-list');
+                if (list && !list.querySelector('.order-card')) {
+                  list.innerHTML = `<div class="card"><div class="empty-state">
+                    <i data-feather="check-circle" style="stroke:var(--success)"></i>
+                    <h3>Semua pengiriman selesai</h3>
+                    <p>Lihat <button onclick="switchDeliveriesTab('history')" style="background:none;border:none;color:var(--primary);cursor:pointer;font-size:13px;text-decoration:underline">Tab Riwayat</button></p>
+                  </div></div>`;
+                  feather.replace();
+                }
+              }, 1900);
+            }, 2000);
+          }
+        }
+      }
     } else {
       showToast(data.message || 'Gagal konfirmasi', 'error');
       btn.disabled = false;
@@ -1951,7 +2293,7 @@ function renderUsersTable(users) {
     admin:    { bg: 'rgba(99,102,241,0.15)',  color: '#a5b4fc', border: 'rgba(99,102,241,0.3)'  },
     operator: { bg: 'rgba(6,182,212,0.15)',   color: '#22d3ee', border: 'rgba(6,182,212,0.3)'   },
   };
-  const roleIcons = { admin: '👑', operator: '⚙️' };
+  const roleIcons = { admin: '<i class="bi bi-shield-fill-check"></i>', operator: '<i class="bi bi-gear-fill"></i>' };
   const selfId = window.APP_CONFIG?.userId;
 
   tbody.innerHTML = users.map(u => {
@@ -2078,5 +2420,154 @@ async function toggleUserStatus(id, currentStatus) {
     loadUsers();
   } else {
     showToast(res?.message || 'Gagal mengubah status user', 'error');
+  }
+}
+
+// ============================================================
+// BOM — Bill of Materials (Bahan Baku per Produk)
+// ============================================================
+let bomRows   = [];   // [{item_id, item_name, unit_symbol, qty_per_unit, notes}]
+let bomItemsRef = []; // cache daftar bahan baku untuk dropdown
+
+async function openBOMModal(productId, productName) {
+  document.getElementById('bom-product-id').value     = productId;
+  document.getElementById('bom-product-name').textContent = productName;
+  bomRows = [];
+
+  // Load daftar items untuk dropdown (gunakan cache kalau sudah ada)
+  if (!bomItemsRef.length) {
+    const d = await apiFetch('api/items.php?action=list');
+    bomItemsRef = d?.data || [];
+  }
+
+  // Load BOM yang sudah ada
+  const data = await apiFetch(`api/products.php?action=get_materials&id=${productId}`);
+  const existing = data?.data || [];
+
+  if (existing.length) {
+    bomRows = existing.map(m => ({
+      item_id:      m.item_id,
+      item_name:    m.item_name,
+      unit_symbol:  m.unit_symbol,
+      qty_per_unit: parseFloat(m.qty_per_unit),
+      notes:        m.notes || '',
+    }));
+  }
+
+  renderBOMList();
+  openModal('modal-bom');
+  feather.replace();
+}
+
+function bomTambahBaris() {
+  bomRows.push({ item_id: '', item_name: '', unit_symbol: '', qty_per_unit: 1, notes: '' });
+  renderBOMList();
+  feather.replace();
+}
+
+function renderBOMList() {
+  const el = document.getElementById('bom-list');
+  if (!bomRows.length) {
+    el.innerHTML = `
+      <div style="text-align:center;padding:24px;color:var(--text-muted);
+        border:1px dashed var(--border);border-radius:var(--radius-sm);font-size:13px">
+        <i data-feather="inbox" style="width:32px;height:32px;margin-bottom:8px;display:block;margin:0 auto 8px"></i>
+        Belum ada bahan baku.<br>Klik "+ Tambah Bahan" untuk menambahkan.
+      </div>`;
+    feather.replace();
+    return;
+  }
+
+  // Build dropdown options
+  const opts = bomItemsRef.map(i =>
+    `<option value="${i.id}" data-unit="${i.unit_symbol}">${i.code} — ${i.name} (${i.unit_symbol})</option>`
+  ).join('');
+
+  el.innerHTML = `
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead>
+        <tr style="border-bottom:1px solid var(--border)">
+          <th style="padding:8px 6px;text-align:left;color:var(--text-muted);font-size:11px;font-weight:600;text-transform:uppercase">Bahan Baku</th>
+          <th style="padding:8px 6px;text-align:center;color:var(--text-muted);font-size:11px;font-weight:600;text-transform:uppercase;width:130px">Qty / 1 pcs</th>
+          <th style="padding:8px 6px;text-align:left;color:var(--text-muted);font-size:11px;font-weight:600;text-transform:uppercase;width:80px">Satuan</th>
+          <th style="width:36px"></th>
+        </tr>
+      </thead>
+      <tbody>
+        ${bomRows.map((row, idx) => `
+          <tr style="border-bottom:1px solid rgba(99,102,241,0.06)">
+            <td style="padding:6px">
+              <select onchange="bomUpdateItem(${idx}, this)"
+                style="width:100%;background:var(--bg-input);border:1px solid var(--border);
+                  border-radius:6px;color:var(--text-primary);padding:6px 8px;font-size:12px;font-family:inherit">
+                <option value="">-- Pilih Bahan --</option>
+                ${opts.replace(`value="${row.item_id}"`, `value="${row.item_id}" selected`)}
+              </select>
+            </td>
+            <td style="padding:6px;text-align:center">
+              <input type="number" value="${row.qty_per_unit}" min="0.0001" step="0.001"
+                oninput="bomRows[${idx}].qty_per_unit=parseFloat(this.value)||0"
+                style="width:110px;background:var(--bg-input);border:1px solid var(--border);
+                  border-radius:6px;color:var(--text-primary);padding:6px 8px;font-size:12px;
+                  text-align:right;font-family:inherit" />
+            </td>
+            <td style="padding:6px;font-size:12px;color:var(--text-muted)">
+              <span id="bom-unit-${idx}">${row.unit_symbol || '—'}</span>
+            </td>
+            <td style="padding:6px;text-align:center">
+              <button onclick="bomHapusBaris(${idx})"
+                style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);
+                  color:var(--danger);border-radius:6px;padding:4px 7px;cursor:pointer">
+                <i data-feather="trash-2" style="width:13px;height:13px"></i>
+              </button>
+            </td>
+          </tr>`).join('')}
+      </tbody>
+    </table>`;
+  feather.replace();
+}
+
+function bomUpdateItem(idx, sel) {
+  const opt = sel.options[sel.selectedIndex];
+  bomRows[idx].item_id     = sel.value;
+  bomRows[idx].unit_symbol = opt.dataset.unit || '';
+  const unitEl = document.getElementById(`bom-unit-${idx}`);
+  if (unitEl) unitEl.textContent = opt.dataset.unit || '—';
+}
+
+function bomHapusBaris(idx) {
+  bomRows.splice(idx, 1);
+  renderBOMList();
+  feather.replace();
+}
+
+async function simpanBOM() {
+  const productId = document.getElementById('bom-product-id').value;
+
+  // Validasi
+  for (const r of bomRows) {
+    if (!r.item_id) { showToast('Pilih bahan baku untuk semua baris', 'warning'); return; }
+    if (r.qty_per_unit <= 0) { showToast('Qty harus lebih dari 0', 'warning'); return; }
+  }
+
+  // Cek duplikat item
+  const ids = bomRows.map(r => r.item_id);
+  if (new Set(ids).size !== ids.length) {
+    showToast('Ada bahan baku yang duplikat', 'warning'); return;
+  }
+
+  const res = await apiPost(`api/products.php?action=save_materials&id=${productId}`, {
+    materials: bomRows.map(r => ({
+      item_id:      r.item_id,
+      qty_per_unit: r.qty_per_unit,
+      notes:        r.notes || '',
+    }))
+  });
+
+  if (res?.success) {
+    showToast('BOM berhasil disimpan', 'success');
+    closeModal('modal-bom');
+  } else {
+    showToast(res?.message || 'Gagal menyimpan BOM', 'error');
   }
 }

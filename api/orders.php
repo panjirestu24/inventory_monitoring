@@ -29,7 +29,16 @@ switch ($method) {
                     LEFT JOIN users u ON o.operator_id = u.id
                     WHERE 1=1";
             $params = [];
-            if ($status) { $sql .= " AND o.status=?"; $params[] = $status; }
+            // Support multi-status filter: statuses[] = ['pending','confirmed',...]
+            $multiStatuses = $_GET['statuses'] ?? [];
+            if (!empty($multiStatuses) && is_array($multiStatuses)) {
+                $placeholders = implode(',', array_fill(0, count($multiStatuses), '?'));
+                $sql .= " AND o.status IN ($placeholders)";
+                $params = array_merge($params, $multiStatuses);
+            } elseif ($status) {
+                $sql .= " AND o.status=?";
+                $params[] = $status;
+            }
             if ($search) { $sql .= " AND (o.order_number LIKE ? OR o.title LIKE ? OR c.name LIKE ?)"; $params[] = "%$search%"; $params[] = "%$search%"; $params[] = "%$search%"; }
             $sql .= " ORDER BY o.created_at DESC";
             $stmt = $pdo->prepare($sql);
@@ -113,6 +122,62 @@ switch ($method) {
                     $total = $qty * $price;
                 }
 
+                // ── VALIDASI STOK SEBELUM ORDER DIBUAT ──────────────
+                $stockErrors = [];
+                $tableCheck  = $pdo->query("SHOW TABLES LIKE 'product_materials'")->fetchColumn();
+                if (!empty($items) && $tableCheck) {
+                    $stmtCheckBom = $pdo->prepare(
+                        "SELECT pm.qty_per_unit,
+                                i.id as item_id, i.name as item_name,
+                                i.stock, u.symbol
+                         FROM product_materials pm
+                         JOIN items i ON pm.item_id = i.id
+                         JOIN units u ON i.unit_id  = u.id
+                         WHERE pm.product_id = ?"
+                    );
+                    // Kumpulkan total kebutuhan per item (bisa dari beberapa produk)
+                    $needed = []; // item_id => ['name','symbol','stock','needed']
+                    foreach ($items as $orderItem) {
+                        $productId = (int)($orderItem['id'] ?? $orderItem['product_id'] ?? 0);
+                        if ($productId <= 0) continue;
+                        $orderQty = (float)($orderItem['qty'] ?? 1);
+                        $stmtCheckBom->execute([$productId]);
+                        foreach ($stmtCheckBom->fetchAll() as $bom) {
+                            $iid = $bom['item_id'];
+                            if (!isset($needed[$iid])) {
+                                $needed[$iid] = [
+                                    'name'   => $bom['item_name'],
+                                    'symbol' => $bom['symbol'],
+                                    'stock'  => (float)$bom['stock'],
+                                    'needed' => 0,
+                                ];
+                            }
+                            $needed[$iid]['needed'] += (float)$bom['qty_per_unit'] * $orderQty;
+                        }
+                    }
+                    // Cek apakah ada yang tidak cukup
+                    foreach ($needed as $iid => $info) {
+                        if ($info['stock'] <= 0) {
+                            $stockErrors[] = "Stok {$info['name']} HABIS (0 {$info['symbol']})";
+                        } elseif ($info['needed'] > $info['stock']) {
+                            $stockErrors[] = "Stok {$info['name']} tidak cukup "
+                                . "(butuh {$info['needed']} {$info['symbol']}, "
+                                . "tersedia {$info['stock']} {$info['symbol']})";
+                        }
+                    }
+                }
+                // Batalkan jika ada stok habis
+                if (!empty($stockErrors)) {
+                    $pdo->rollBack();
+                    echo json_encode([
+                        'success'       => false,
+                        'message'       => 'Order dibatalkan karena stok bahan baku tidak mencukupi.',
+                        'stock_errors'  => $stockErrors,
+                    ]);
+                    exit;
+                }
+                // ── END VALIDASI STOK ────────────────────────────────
+
                 // Gunakan grand_total_override kalau ada (dikirim dari frontend)
                 if (!empty($data['grand_total_override'])) {
                     $grand = (float)$data['grand_total_override'];
@@ -142,6 +207,76 @@ switch ($method) {
                 ]);
                 $orderId = $pdo->lastInsertId();
 
+                // ── Kurangi stok bahan baku berdasarkan BOM produk ──
+                $stockWarnings = [];
+                if (!empty($items)) {
+                    // Cek dulu apakah tabel product_materials ada
+                    $tableCheck = $pdo->query("SHOW TABLES LIKE 'product_materials'")->fetchColumn();
+                    if ($tableCheck) {
+                        $stmtBom = $pdo->prepare(
+                            "SELECT pm.item_id, pm.qty_per_unit,
+                                    i.stock, i.name as item_name, u.symbol
+                             FROM product_materials pm
+                             JOIN items i ON pm.item_id = i.id
+                             JOIN units u ON i.unit_id = u.id
+                             WHERE pm.product_id = ?"
+                        );
+                        $stmtUpdateStock = $pdo->prepare(
+                            "UPDATE items SET stock = stock - ? WHERE id = ? AND stock >= ?"
+                        );
+                        $stmtLogTx = $pdo->prepare(
+                            "INSERT INTO stock_transactions
+                             (item_id, type, reference_type, reference_id, quantity,
+                              stock_before, stock_after, notes, created_by)
+                             VALUES (?,?,?,?,?,?,?,?,?)"
+                        );
+                        $stmtGetStock = $pdo->prepare("SELECT stock FROM items WHERE id = ?");
+
+                        foreach ($items as $orderItem) {
+                            // Ambil product_id — bisa dari key 'id' atau 'product_id'
+                            $productId = (int)($orderItem['id'] ?? $orderItem['product_id'] ?? 0);
+                            if ($productId <= 0) continue; // skip item manual
+
+                            $orderQty = (float)($orderItem['qty'] ?? 1);
+
+                            $stmtBom->execute([$productId]);
+                            $boms = $stmtBom->fetchAll();
+
+                            foreach ($boms as $bom) {
+                                $itemId      = (int)$bom['item_id'];
+                                $qtyNeeded   = (float)$bom['qty_per_unit'] * $orderQty;
+                                $stockBefore = (float)$bom['stock'];
+
+                                if ($qtyNeeded <= 0) continue;
+
+                                $stmtUpdateStock->execute([$qtyNeeded, $itemId, $qtyNeeded]);
+                                if ($stmtUpdateStock->rowCount() > 0) {
+                                    $stmtGetStock->execute([$itemId]);
+                                    $stockAfter = (float)$stmtGetStock->fetchColumn();
+                                    $stmtLogTx->execute([
+                                        $itemId, 'out', 'order', $orderId,
+                                        $qtyNeeded, $stockBefore, $stockAfter,
+                                        "Order #{$orderNum} — {$orderItem['name']} ×{$orderQty}",
+                                        $_SESSION['user_id']
+                                    ]);
+                                } else {
+                                    // Stok tidak cukup — kurangi sampai 0 dan catat warning
+                                    if ($stockBefore > 0) {
+                                        $pdo->prepare("UPDATE items SET stock = 0 WHERE id = ?")->execute([$itemId]);
+                                        $stmtLogTx->execute([
+                                            $itemId, 'out', 'order', $orderId,
+                                            $stockBefore, $stockBefore, 0,
+                                            "Order #{$orderNum} — stok tidak cukup, dikurangi hingga 0",
+                                            $_SESSION['user_id']
+                                        ]);
+                                    }
+                                    $stockWarnings[] = "{$bom['item_name']}: stok tidak cukup (butuh {$qtyNeeded} {$bom['symbol']}, tersedia {$stockBefore})";
+                                }
+                            }
+                        }
+                    }
+                }
+
                 $pdo->commit();
 
                 // Ambil data lengkap untuk nota
@@ -159,12 +294,13 @@ switch ($method) {
                 $orderData = $stmt->fetch();
 
                 echo json_encode([
-                    'success'      => true,
-                    'message'      => 'Order berhasil dibuat',
-                    'order_number' => $orderNum,
-                    'order_id'     => $orderId,
-                    'customer_id'  => $customerId,
-                    'data'         => $orderData,
+                    'success'        => true,
+                    'message'        => 'Order berhasil dibuat',
+                    'order_number'   => $orderNum,
+                    'order_id'       => $orderId,
+                    'customer_id'    => $customerId,
+                    'data'           => $orderData,
+                    'stock_warnings' => $stockWarnings ?? [],
                 ]);
 
             } catch (Exception $e) {

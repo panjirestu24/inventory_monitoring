@@ -41,7 +41,16 @@ switch ($method) {
                     LEFT JOIN users u ON d.created_by = u.id
                     WHERE 1=1";
             $params = [];
-            if ($status) { $sql .= " AND d.status = ?"; $params[] = $status; }
+            // Support multi-status: statuses[] = ['prepared','shipping',...]
+            $multiStatuses = $_GET['statuses'] ?? [];
+            if (!empty($multiStatuses) && is_array($multiStatuses)) {
+                $placeholders = implode(',', array_fill(0, count($multiStatuses), '?'));
+                $sql .= " AND d.status IN ($placeholders)";
+                $params = array_merge($params, $multiStatuses);
+            } elseif ($status) {
+                $sql .= " AND d.status = ?";
+                $params[] = $status;
+            }
             if ($search) {
                 $sql .= " AND (o.order_number LIKE ? OR c.name LIKE ? OR d.destination_address LIKE ?)";
                 $params[] = "%$search%"; $params[] = "%$search%"; $params[] = "%$search%";

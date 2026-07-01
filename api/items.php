@@ -23,11 +23,10 @@ switch ($method) {
             $search = $_GET['search'] ?? '';
             $category = $_GET['category'] ?? '';
             $low_stock = $_GET['low_stock'] ?? '';
-            $sql = "SELECT i.*, u.symbol as unit_symbol, c.name as category_name, s.name as supplier_name
+            $sql = "SELECT i.*, u.symbol as unit_symbol, c.name as category_name
                     FROM items i
                     JOIN units u ON i.unit_id = u.id
                     JOIN categories c ON i.category_id = c.id
-                    LEFT JOIN suppliers s ON i.supplier_id = s.id
                     WHERE i.is_active = 1";
             $params = [];
             if ($search) {
@@ -62,10 +61,10 @@ switch ($method) {
     case 'POST':
         $data = json_decode(file_get_contents('php://input'), true);
         if ($action === 'add') {
-            $stmt = $pdo->prepare("INSERT INTO items (code, name, category_id, unit_id, supplier_id, description, stock, min_stock, max_stock, purchase_price, selling_price, location) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)");
+            $stmt = $pdo->prepare("INSERT INTO items (code, name, category_id, unit_id, description, stock, min_stock, max_stock, purchase_price, selling_price, location) VALUES (?,?,?,?,?,?,?,?,?,?,?)");
             $stmt->execute([
                 $data['code'], $data['name'], $data['category_id'], $data['unit_id'],
-                $data['supplier_id'] ?: null, $data['description'] ?? '',
+                $data['description'] ?? '',
                 $data['stock'] ?? 0, $data['min_stock'] ?? 0, $data['max_stock'] ?? 0,
                 $data['purchase_price'] ?? 0, $data['selling_price'] ?? 0, $data['location'] ?? ''
             ]);
@@ -110,10 +109,10 @@ switch ($method) {
     case 'PUT':
         $data = json_decode(file_get_contents('php://input'), true);
         $id = (int)($data['id'] ?? 0);
-        $stmt = $pdo->prepare("UPDATE items SET name=?, category_id=?, unit_id=?, supplier_id=?, description=?, min_stock=?, max_stock=?, purchase_price=?, selling_price=?, location=? WHERE id=?");
+        $stmt = $pdo->prepare("UPDATE items SET name=?, category_id=?, unit_id=?, description=?, min_stock=?, max_stock=?, purchase_price=?, selling_price=?, location=? WHERE id=?");
         $stmt->execute([
             $data['name'], $data['category_id'], $data['unit_id'],
-            $data['supplier_id'] ?: null, $data['description'] ?? '',
+            $data['description'] ?? '',
             $data['min_stock'] ?? 0, $data['max_stock'] ?? 0,
             $data['purchase_price'] ?? 0, $data['selling_price'] ?? 0,
             $data['location'] ?? '', $id
