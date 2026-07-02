@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <?php
 // track.php - Halaman publik untuk pelanggan tracking pesanan
 // Tidak perlu login
@@ -7,7 +7,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Cek Status Pesanan — PrintTrack</title>
+  <title>Cek Status Pesanan — Ranum Indocraft</title>
   <link rel="icon" type="image/png" href="logo.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
@@ -200,7 +200,7 @@
       <img src="logo.png" alt="Logo" style="width:32px;height:32px;object-fit:contain;border-radius:6px">
     </div>
     <div class="logo-name">
-      PrintTrack
+      Ranum Indocraft
       <span>Inventory &amp; Monitoring Percetakan</span>
     </div>
   </div>
@@ -238,7 +238,7 @@
 
   <!-- Footer -->
   <div class="page-footer">
-    &copy; <?= date('Y') ?> <a href="#">PrintTrack</a> &mdash; Sistem Inventory &amp; Monitoring Percetakan
+    &copy; <?= date('Y') ?> <a href="#">Ranum Indocraft</a> &mdash; Sistem Inventory &amp; Monitoring Percetakan
   </div>
 
 </div>

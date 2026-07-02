@@ -28,7 +28,7 @@ switch ($method) {
         if ($action === 'list') {
             $search = $_GET['search'] ?? '';
             $role   = $_GET['role']   ?? '';
-            $sql    = "SELECT id, name, email, role, is_active, last_login, created_at FROM users WHERE 1=1";
+            $sql    = "SELECT id_users, name, email, role, is_active, last_login, created_at FROM users WHERE 1=1";
             $params = [];
             if ($search) {
                 $sql .= " AND (name LIKE ? OR email LIKE ?)";
@@ -46,7 +46,7 @@ switch ($method) {
 
         } elseif ($action === 'get') {
             $id   = (int)($_GET['id'] ?? 0);
-            $stmt = $pdo->prepare("SELECT id, name, email, role, is_active FROM users WHERE id = ?");
+            $stmt = $pdo->prepare("SELECT id_users, name, email, role, is_active FROM users WHERE id_users = ?");
             $stmt->execute([$id]);
             $user = $stmt->fetch();
             echo json_encode(['success' => (bool)$user, 'berhasil' => (bool)$user, 'data' => $user]);
@@ -79,7 +79,7 @@ switch ($method) {
         }
 
         // Cek email duplikat
-        $chk = $pdo->prepare("SELECT id FROM users WHERE email = ?");
+        $chk = $pdo->prepare("SELECT id_users FROM users WHERE email = ?");
         $chk->execute([$email]);
         if ($chk->fetch()) {
             echo json_encode(['success' => false, 'berhasil' => false, 'message' => 'Email sudah terdaftar']);
@@ -108,7 +108,7 @@ switch ($method) {
         }
 
         // Cari user yang sedang diedit
-        $cur = $pdo->prepare("SELECT id, role FROM users WHERE id = ?");
+        $cur = $pdo->prepare("SELECT id_users, role FROM users WHERE id_users = ?");
         $cur->execute([$id]);
         $curUser = $cur->fetch();
         if (!$curUser) {
@@ -126,7 +126,7 @@ switch ($method) {
 
         // Cek duplikat email (selain dirinya)
         if ($email) {
-            $chk = $pdo->prepare("SELECT id FROM users WHERE email = ? AND id != ?");
+            $chk = $pdo->prepare("SELECT id_users FROM users WHERE email = ? AND id_users != ?");
             $chk->execute([$email, $id]);
             if ($chk->fetch()) {
                 echo json_encode(['success' => false, 'berhasil' => false, 'message' => 'Email sudah digunakan user lain']);
@@ -154,12 +154,12 @@ switch ($method) {
         }
 
         $params[] = $id;
-        $sql = "UPDATE users SET " . implode(', ', $sets) . " WHERE id = ?";
+        $sql = "UPDATE users SET " . implode(', ', $sets) . " WHERE id_users = ?";
         $pdo->prepare($sql)->execute($params);
         echo json_encode(['success' => true, 'berhasil' => true, 'message' => 'User berhasil diupdate']);
         break;
 
-    // ── DELETE: Soft delete ───────────────────────────────────
+    // ── DELETE: Hard delete ───────────────────────────────────
     case 'DELETE':
         $id = (int)($_GET['id'] ?? 0);
 
@@ -169,7 +169,7 @@ switch ($method) {
             exit;
         }
 
-        $pdo->prepare("UPDATE users SET is_active = 0 WHERE id = ?")->execute([$id]);
-        echo json_encode(['success' => true, 'berhasil' => true, 'message' => 'User berhasil dinonaktifkan']);
+        $pdo->prepare("DELETE FROM users WHERE id_users = ?")->execute([$id]);
+        echo json_encode(['success' => true, 'berhasil' => true, 'message' => 'User berhasil dihapus permanen']);
         break;
 }

@@ -25,8 +25,8 @@ switch ($method) {
             $low_stock = $_GET['low_stock'] ?? '';
             $sql = "SELECT i.*, u.symbol as unit_symbol, c.name as category_name
                     FROM items i
-                    JOIN units u ON i.unit_id = u.id
-                    JOIN categories c ON i.category_id = c.id
+                    JOIN units u ON i.unit_id = u.id_units
+                    JOIN categories c ON i.category_id = c.id_categories
                     WHERE i.is_active = 1";
             $params = [];
             if ($search) {
@@ -46,13 +46,13 @@ switch ($method) {
             echo json_encode(['success' => true, 'berhasil' => true, 'data' => $stmt->fetchAll()]);
         } elseif ($action === 'get') {
             $id = (int)($_GET['id'] ?? 0);
-            $stmt = $pdo->prepare("SELECT i.*, u.symbol as unit_symbol, c.name as category_name FROM items i JOIN units u ON i.unit_id=u.id JOIN categories c ON i.category_id=c.id WHERE i.id=?");
+            $stmt = $pdo->prepare("SELECT i.*, u.symbol as unit_symbol, c.name as category_name FROM items i JOIN units u ON i.unit_id=u.id_units JOIN categories c ON i.category_id=c.id_categories WHERE i.id_items=?");
             $stmt->execute([$id]);
             $item = $stmt->fetch();
             echo json_encode(['success' => true, 'berhasil' => (bool)$item, 'data' => $item]);
         } elseif ($action === 'transactions') {
             $id = (int)($_GET['id'] ?? 0);
-            $stmt = $pdo->prepare("SELECT st.*, u.name as user_name FROM stock_transactions st LEFT JOIN users u ON st.created_by=u.id WHERE st.item_id=? ORDER BY st.created_at DESC LIMIT 20");
+            $stmt = $pdo->prepare("SELECT st.*, u.name as user_name FROM stock_transactions st LEFT JOIN users u ON st.created_by=u.id_users WHERE st.item_id=? ORDER BY st.created_at DESC LIMIT 20");
             $stmt->execute([$id]);
             echo json_encode(['success' => true, 'berhasil' => true, 'data' => $stmt->fetchAll()]);
         }
@@ -78,19 +78,19 @@ switch ($method) {
         } elseif ($action === 'stock_in') {
             $itemId = (int)$data['item_id'];
             $qty = (float)$data['quantity'];
-            $stmt = $pdo->prepare("SELECT stock FROM items WHERE id=?");
+            $stmt = $pdo->prepare("SELECT stock FROM items WHERE id_items=?");
             $stmt->execute([$itemId]);
             $item = $stmt->fetch();
             $before = (float)$item['stock'];
             $after = $before + $qty;
-            $pdo->prepare("UPDATE items SET stock=? WHERE id=?")->execute([$after, $itemId]);
+            $pdo->prepare("UPDATE items SET stock=? WHERE id_items=?")->execute([$after, $itemId]);
             $pdo->prepare("INSERT INTO stock_transactions (item_id, type, reference_type, quantity, stock_before, stock_after, unit_price, notes, created_by) VALUES (?,?,?,?,?,?,?,?,?)")
                 ->execute([$itemId, 'in', 'purchase', $qty, $before, $after, $data['unit_price'] ?? 0, $data['notes'] ?? '', $_SESSION['user_id']]);
             echo json_encode(['success' => true, 'berhasil' => true, 'pesan' => 'Stok masuk berhasil dicatat', 'message' => 'Stok masuk berhasil dicatat']);
         } elseif ($action === 'stock_out') {
             $itemId = (int)$data['item_id'];
             $qty = (float)$data['quantity'];
-            $stmt = $pdo->prepare("SELECT stock FROM items WHERE id=?");
+            $stmt = $pdo->prepare("SELECT stock FROM items WHERE id_items=?");
             $stmt->execute([$itemId]);
             $item = $stmt->fetch();
             $before = (float)$item['stock'];
@@ -99,7 +99,7 @@ switch ($method) {
                 exit;
             }
             $after = $before - $qty;
-            $pdo->prepare("UPDATE items SET stock=? WHERE id=?")->execute([$after, $itemId]);
+            $pdo->prepare("UPDATE items SET stock=? WHERE id_items=?")->execute([$after, $itemId]);
             $pdo->prepare("INSERT INTO stock_transactions (item_id, type, reference_type, quantity, stock_before, stock_after, notes, created_by) VALUES (?,?,?,?,?,?,?,?)")
                 ->execute([$itemId, 'out', 'order', $qty, $before, $after, $data['notes'] ?? '', $_SESSION['user_id']]);
             echo json_encode(['success' => true, 'berhasil' => true, 'pesan' => 'Stok keluar berhasil dicatat', 'message' => 'Stok keluar berhasil dicatat']);
@@ -109,7 +109,7 @@ switch ($method) {
     case 'PUT':
         $data = json_decode(file_get_contents('php://input'), true);
         $id = (int)($data['id'] ?? 0);
-        $stmt = $pdo->prepare("UPDATE items SET name=?, category_id=?, unit_id=?, description=?, min_stock=?, max_stock=?, purchase_price=?, selling_price=?, location=? WHERE id=?");
+        $stmt = $pdo->prepare("UPDATE items SET name=?, category_id=?, unit_id=?, description=?, min_stock=?, max_stock=?, purchase_price=?, selling_price=?, location=? WHERE id_items=?");
         $stmt->execute([
             $data['name'], $data['category_id'], $data['unit_id'],
             $data['description'] ?? '',
@@ -122,7 +122,7 @@ switch ($method) {
 
     case 'DELETE':
         $id = (int)($_GET['id'] ?? 0);
-        $pdo->prepare("UPDATE items SET is_active=0 WHERE id=?")->execute([$id]);
+        $pdo->prepare("UPDATE items SET is_active=0 WHERE id_items=?")->execute([$id]);
         echo json_encode(['success' => true, 'berhasil' => true, 'pesan' => 'Item berhasil dihapus', 'message' => 'Item berhasil dihapus']);
         break;
 }

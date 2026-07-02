@@ -22,8 +22,8 @@ switch ($method) {
             $stmt = $pdo->query(
                 "SELECT p.*, c.name as category_name, u.symbol as unit_symbol
                  FROM products p
-                 LEFT JOIN categories c ON p.category_id = c.id
-                 LEFT JOIN units u ON p.unit_id = u.id
+                 LEFT JOIN categories c ON p.category_id = c.id_categories
+                 LEFT JOIN units u ON p.unit_id = u.id_units
                  WHERE p.is_active = 1
                  ORDER BY c.name, p.name"
             );
@@ -33,15 +33,15 @@ switch ($method) {
             $stmt = $pdo->query(
                 "SELECT p.*, c.name as category_name, u.symbol as unit_symbol
                  FROM products p
-                 LEFT JOIN categories c ON p.category_id = c.id
-                 LEFT JOIN units u ON p.unit_id = u.id
+                 LEFT JOIN categories c ON p.category_id = c.id_categories
+                 LEFT JOIN units u ON p.unit_id = u.id_units
                  ORDER BY c.name, p.name"
             );
             echo json_encode(['success' => true, 'data' => $stmt->fetchAll()]);
 
         } elseif ($action === 'get') {
             $id   = (int)($_GET['id'] ?? 0);
-            $stmt = $pdo->prepare("SELECT * FROM products WHERE id = ?");
+            $stmt = $pdo->prepare("SELECT * FROM products WHERE id_products = ?");
             $stmt->execute([$id]);
             echo json_encode(['success' => true, 'data' => $stmt->fetch()]);
 
@@ -52,8 +52,8 @@ switch ($method) {
                     "SELECT pm.*, i.name as item_name, i.code as item_code,
                             u.symbol as unit_symbol, i.stock as current_stock
                      FROM product_materials pm
-                     JOIN items i ON pm.item_id = i.id
-                     JOIN units u ON i.unit_id = u.id
+                     JOIN items i ON pm.item_id = i.id_items
+                     JOIN units u ON i.unit_id = u.id_units
                      WHERE pm.product_id = ?
                      ORDER BY i.name"
                 );
@@ -91,8 +91,7 @@ switch ($method) {
                     UNIQUE KEY `uk_product_item` (`product_id`, `item_id`)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
-                // Hapus BOM lama untuk produk ini
-                $pdo->prepare("DELETE FROM product_materials WHERE product_id = ?")->execute([$id]);
+        $pdo->prepare("DELETE FROM product_materials WHERE product_id = ?")->execute([$id]);
 
                 // Insert BOM baru
                 $ins = $pdo->prepare(
@@ -155,7 +154,7 @@ switch ($method) {
         $data = json_decode(file_get_contents('php://input'), true);
         $id   = (int)($data['id'] ?? 0);
         $stmt = $pdo->prepare(
-            "UPDATE products SET name=?, category_id=?, unit_id=?, default_price=?, description=?, is_active=? WHERE id=?"
+            "UPDATE products SET name=?, category_id=?, unit_id=?, default_price=?, description=?, is_active=? WHERE id_products=?"
         );
         $stmt->execute([
             $data['name'],
@@ -175,7 +174,7 @@ switch ($method) {
             exit;
         }
         $id = (int)($_GET['id'] ?? 0);
-        $pdo->prepare("UPDATE products SET is_active = 0 WHERE id = ?")->execute([$id]);
+        $pdo->prepare("UPDATE products SET is_active = 0 WHERE id_products = ?")->execute([$id]);
         echo json_encode(['success' => true, 'message' => 'Produk berhasil dinonaktifkan']);
         break;
 }

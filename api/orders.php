@@ -22,11 +22,10 @@ switch ($method) {
         if ($action === 'list') {
             $status = $_GET['status'] ?? '';
             $search = $_GET['search'] ?? '';
-            $sql = "SELECT o.*, c.name as customer_name, m.name as machine_name, u.name as operator_name
+            $sql = "SELECT o.*, c.name as customer_name, u.name as operator_name
                     FROM orders o
-                    JOIN customers c ON o.customer_id = c.id
-                    LEFT JOIN machines m ON o.machine_id = m.id
-                    LEFT JOIN users u ON o.operator_id = u.id
+                    JOIN customers c ON o.customer_id = c.id_customers
+                    LEFT JOIN users u ON o.operator_id = u.id_users
                     WHERE 1=1";
             $params = [];
             // Support multi-status filter: statuses[] = ['pending','confirmed',...]
@@ -46,10 +45,10 @@ switch ($method) {
             echo json_encode(['success' => true, 'data' => $stmt->fetchAll()]);
         } elseif ($action === 'get') {
             $id = (int)($_GET['id'] ?? 0);
-            $stmt = $pdo->prepare("SELECT o.*, c.name as customer_name, m.name as machine_name FROM orders o JOIN customers c ON o.customer_id=c.id LEFT JOIN machines m ON o.machine_id=m.id WHERE o.id=?");
+            $stmt = $pdo->prepare("SELECT o.*, c.name as customer_name FROM orders o JOIN customers c ON o.customer_id=c.id_customers WHERE o.id_orders=?");
             $stmt->execute([$id]);
             $order = $stmt->fetch();
-            $stmt2 = $pdo->prepare("SELECT oi.*, i.name as item_name, u.symbol FROM order_items oi JOIN items i ON oi.item_id=i.id JOIN units u ON i.unit_id=u.id WHERE oi.order_id=?");
+            $stmt2 = $pdo->prepare("SELECT oi.*, i.name as item_name, u.symbol FROM order_items oi JOIN items i ON oi.item_id=i.id_items JOIN units u ON i.unit_id=u.id_units WHERE oi.order_id=?");
             $stmt2->execute([$id]);
             $order['items'] = $stmt2->fetchAll();
             echo json_encode(['success' => true, 'data' => $order]);
@@ -57,11 +56,73 @@ switch ($method) {
             $statuses = ['pending','confirmed','in_progress','quality_check','completed'];
             $kanban = [];
             foreach ($statuses as $s) {
-                $stmt = $pdo->prepare("SELECT o.id, o.order_number, o.title, o.priority, o.due_date, c.name as customer_name, m.name as machine_name FROM orders o JOIN customers c ON o.customer_id=c.id LEFT JOIN machines m ON o.machine_id=m.id WHERE o.status=? ORDER BY FIELD(o.priority,'urgent','high','normal','low'), o.due_date LIMIT 10");
+                $stmt = $pdo->prepare("SELECT o.id_orders, o.order_number, o.title, o.priority, o.due_date, c.name as customer_name FROM orders o JOIN customers c ON o.customer_id=c.id_customers WHERE o.status=? ORDER BY FIELD(o.priority,'urgent','high','normal','low'), o.due_date LIMIT 10");
                 $stmt->execute([$s]);
                 $kanban[$s] = $stmt->fetchAll();
             }
             echo json_encode(['success' => true, 'data' => $kanban]);
+
+        } elseif ($action === 'mes_monitoring') {
+            // ── FIFO Queue: order aktif diurutkan waktu masuk (FIFO) ──
+            $fifoStmt = $pdo->query(
+                "SELECT o.id_orders, o.order_number, o.title, o.status, o.priority,
+                        o.quantity, o.due_date, o.created_at, o.updated_at,
+                        c.name as customer_name,
+                        u.name as operator_name,
+                        TIMESTAMPDIFF(MINUTE, o.created_at, NOW()) as age_minutes,
+                        TIMESTAMPDIFF(MINUTE, o.updated_at, NOW()) as idle_minutes,
+                        CASE
+                            WHEN o.due_date < CURDATE() THEN 'overdue'
+                            WHEN o.due_date = CURDATE() THEN 'today'
+                            WHEN o.due_date = DATE_ADD(CURDATE(), INTERVAL 1 DAY) THEN 'tomorrow'
+                            ELSE 'normal'
+                        END as due_status
+                 FROM orders o
+                 JOIN customers c ON o.customer_id = c.id_customers
+                 LEFT JOIN users u ON o.operator_id = u.id_users
+                 WHERE o.status NOT IN ('completed','cancelled')
+                 ORDER BY o.created_at ASC"   /* FIFO: terlama masuk = paling atas */
+            );
+            $fifoOrders = $fifoStmt->fetchAll();
+
+            // ── Kanban pipeline dengan durasi per status ──
+            $kanbanStmt = $pdo->prepare(
+                "SELECT o.id_orders, o.order_number, o.title, o.priority, o.due_date,
+                        o.created_at, o.updated_at,
+                        c.name as customer_name,
+                        TIMESTAMPDIFF(HOUR, o.updated_at, NOW()) as hours_in_status
+                 FROM orders o
+                 JOIN customers c ON o.customer_id = c.id_customers
+                 WHERE o.status = ?
+                 ORDER BY o.created_at ASC
+                 LIMIT 15"
+            );
+            $pipeline = [];
+            foreach (['pending','confirmed','in_progress','quality_check'] as $s) {
+                $kanbanStmt->execute([$s]);
+                $pipeline[$s] = $kanbanStmt->fetchAll();
+            }
+
+            // ── Statistik throughput hari ini ──
+            $statsStmt = $pdo->query(
+                "SELECT
+                    SUM(CASE WHEN status NOT IN ('completed','cancelled') THEN 1 ELSE 0 END) as active,
+                    SUM(CASE WHEN status = 'completed' AND DATE(completed_date) = CURDATE() THEN 1 ELSE 0 END) as done_today,
+                    SUM(CASE WHEN status = 'in_progress' THEN 1 ELSE 0 END) as in_progress,
+                    SUM(CASE WHEN due_date < CURDATE() AND status NOT IN ('completed','cancelled') THEN 1 ELSE 0 END) as overdue,
+                    AVG(CASE WHEN status = 'completed'
+                        THEN TIMESTAMPDIFF(MINUTE, created_at,
+                            COALESCE(completed_date, updated_at)) END) as avg_minutes
+                 FROM orders"
+            );
+            $stats = $statsStmt->fetch();
+
+            echo json_encode([
+                'success'      => true,
+                'fifo_queue'   => $fifoOrders,
+                'pipeline'     => $pipeline,
+                'stats'        => $stats,
+            ]);
         }
         break;
 
@@ -74,14 +135,14 @@ switch ($method) {
             try {
                 // Cari pelanggan berdasarkan HP, jika belum ada buat baru
                 $phone = preg_replace('/[^0-9]/', '', $data['customer_phone'] ?? '');
-                $stmt  = $pdo->prepare("SELECT id FROM customers WHERE phone = ? AND is_active = 1 LIMIT 1");
+                $stmt  = $pdo->prepare("SELECT id_customers FROM customers WHERE phone = ? AND is_active = 1 LIMIT 1");
                 $stmt->execute([$phone]);
                 $existing = $stmt->fetch();
 
                 if ($existing) {
-                    $customerId = $existing['id'];
+                    $customerId = $existing['id_customers'];
                     // Update nama jika berbeda
-                    $pdo->prepare("UPDATE customers SET name=?, city=?, updated_at=NOW() WHERE id=?")
+                    $pdo->prepare("UPDATE customers SET name=?, city=?, updated_at=NOW() WHERE id_customers=?")
                         ->execute([$data['customer_name'], $data['customer_city'] ?? '', $customerId]);
                 } else {
                     // Auto-generate kode pelanggan
@@ -128,11 +189,11 @@ switch ($method) {
                 if (!empty($items) && $tableCheck) {
                     $stmtCheckBom = $pdo->prepare(
                         "SELECT pm.qty_per_unit,
-                                i.id as item_id, i.name as item_name,
+                                i.id_items as item_id, i.name as item_name,
                                 i.stock, u.symbol
                          FROM product_materials pm
-                         JOIN items i ON pm.item_id = i.id
-                         JOIN units u ON i.unit_id  = u.id
+                         JOIN items i ON pm.item_id = i.id_items
+                         JOIN units u ON i.unit_id  = u.id_units
                          WHERE pm.product_id = ?"
                     );
                     // Kumpulkan total kebutuhan per item (bisa dari beberapa produk)
@@ -187,13 +248,12 @@ switch ($method) {
 
                 $pdo->prepare(
                     "INSERT INTO orders
-                     (order_number, customer_id, machine_id, operator_id, title, description,
+                     (order_number, customer_id, operator_id, title, description,
                       status, priority, quantity, unit_price, total_price, discount, tax,
                       grand_total, start_date, due_date, notes, created_by)
-                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
                 )->execute([
                     $orderNum, $customerId,
-                    isset($data['machine_id'])  && $data['machine_id']  ? $data['machine_id']  : null,
                     isset($data['operator_id']) && $data['operator_id'] ? $data['operator_id'] : null,
                     $data['title'],
                     $data['description'] ?? '',
@@ -217,12 +277,12 @@ switch ($method) {
                             "SELECT pm.item_id, pm.qty_per_unit,
                                     i.stock, i.name as item_name, u.symbol
                              FROM product_materials pm
-                             JOIN items i ON pm.item_id = i.id
-                             JOIN units u ON i.unit_id = u.id
+                             JOIN items i ON pm.item_id = i.id_items
+                             JOIN units u ON i.unit_id = u.id_units
                              WHERE pm.product_id = ?"
                         );
                         $stmtUpdateStock = $pdo->prepare(
-                            "UPDATE items SET stock = stock - ? WHERE id = ? AND stock >= ?"
+                            "UPDATE items SET stock = stock - ? WHERE id_items = ? AND stock >= ?"
                         );
                         $stmtLogTx = $pdo->prepare(
                             "INSERT INTO stock_transactions
@@ -230,7 +290,7 @@ switch ($method) {
                               stock_before, stock_after, notes, created_by)
                              VALUES (?,?,?,?,?,?,?,?,?)"
                         );
-                        $stmtGetStock = $pdo->prepare("SELECT stock FROM items WHERE id = ?");
+                        $stmtGetStock = $pdo->prepare("SELECT stock FROM items WHERE id_items = ?");
 
                         foreach ($items as $orderItem) {
                             // Ambil product_id — bisa dari key 'id' atau 'product_id'
@@ -262,7 +322,7 @@ switch ($method) {
                                 } else {
                                     // Stok tidak cukup — kurangi sampai 0 dan catat warning
                                     if ($stockBefore > 0) {
-                                        $pdo->prepare("UPDATE items SET stock = 0 WHERE id = ?")->execute([$itemId]);
+                                        $pdo->prepare("UPDATE items SET stock = 0 WHERE id_items = ?")->execute([$itemId]);
                                         $stmtLogTx->execute([
                                             $itemId, 'out', 'order', $orderId,
                                             $stockBefore, $stockBefore, 0,
@@ -283,12 +343,11 @@ switch ($method) {
                 $stmt = $pdo->prepare(
                     "SELECT o.*, c.name as customer_name, c.phone as customer_phone,
                             c.city as customer_city, c.address as customer_address,
-                            m.name as machine_name, u.name as operator_name
+                            u.name as operator_name
                      FROM orders o
-                     JOIN customers c ON o.customer_id = c.id
-                     LEFT JOIN machines m ON o.machine_id = m.id
-                     LEFT JOIN users u ON o.operator_id = u.id
-                     WHERE o.id = ?"
+                     JOIN customers c ON o.customer_id = c.id_customers
+                     LEFT JOIN users u ON o.operator_id = u.id_users
+                     WHERE o.id_orders = ?"
                 );
                 $stmt->execute([$orderId]);
                 $orderData = $stmt->fetch();
@@ -318,13 +377,13 @@ switch ($method) {
         $seq = str_pad($stmt->fetchColumn(), 4, '0', STR_PAD_LEFT);
         $orderNum = $prefix . '-' . date('ym') . '-' . $seq;
 
-        $stmt = $pdo->prepare("INSERT INTO orders (order_number, customer_id, machine_id, operator_id, title, description, status, priority, quantity, unit_price, total_price, discount, tax, grand_total, start_date, due_date, notes) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
+        $stmt = $pdo->prepare("INSERT INTO orders (order_number, customer_id, operator_id, title, description, status, priority, quantity, unit_price, total_price, discount, tax, grand_total, start_date, due_date, notes) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
         $total = ($data['quantity'] ?? 1) * ($data['unit_price'] ?? 0);
         $discount = $data['discount'] ?? 0;
         $tax = $data['tax'] ?? 11;
         $grand = ($total - $discount) * (1 + $tax / 100);
         $stmt->execute([
-            $orderNum, $data['customer_id'], $data['machine_id'] ?: null, $data['operator_id'] ?: null,
+            $orderNum, $data['customer_id'], $data['operator_id'] ?: null,
             $data['title'], $data['description'] ?? '', $data['status'] ?? 'pending',
             $data['priority'] ?? 'normal', $data['quantity'] ?? 1,
             $data['unit_price'] ?? 0, $total, $discount, $tax, $grand,
@@ -343,25 +402,15 @@ switch ($method) {
             $stmt = $pdo->prepare(
                 "UPDATE orders SET status=?,
                  completed_date = CASE WHEN ? = 'completed' THEN NOW() ELSE completed_date END
-                 WHERE id=?"
+                 WHERE id_orders=?"
             );
             $stmt->execute([$newStatus, $newStatus, $id]);
-            // Update machine jika ada
-            if (!empty($data['machine_id'])) {
-                $machStatus = $newStatus === 'in_progress' ? 'active' : 'idle';
-                $pdo->prepare("UPDATE machines SET status=? WHERE id=?")->execute([$machStatus, $data['machine_id']]);
-            }
             echo json_encode(['success' => true, 'message' => 'Status diupdate ke ' . $newStatus]);
             break;
         }
 
-        $stmt = $pdo->prepare("UPDATE orders SET status=?, machine_id=?, operator_id=?, notes=?, completed_date = CASE WHEN ? = 'completed' THEN NOW() ELSE completed_date END WHERE id=?");
-        $stmt->execute([$data['status'], $data['machine_id'] ?: null, $data['operator_id'] ?: null, $data['notes'] ?? '', $data['status'], $id]);
-        // Update machine status
-        if ($data['machine_id']) {
-            $machStatus = $data['status'] === 'in_progress' ? 'active' : 'idle';
-            $pdo->prepare("UPDATE machines SET status=? WHERE id=?")->execute([$machStatus, $data['machine_id']]);
-        }
+        $stmt = $pdo->prepare("UPDATE orders SET status=?, operator_id=?, notes=?, completed_date = CASE WHEN ? = 'completed' THEN NOW() ELSE completed_date END WHERE id_orders=?");
+        $stmt->execute([$data['status'], $data['operator_id'] ?: null, $data['notes'] ?? '', $data['status'], $id]);
         echo json_encode(['success' => true, 'message' => 'Order berhasil diupdate']);
         break;
 }

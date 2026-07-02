@@ -1,6 +1,6 @@
 -- ============================================================
 -- DATABASE: db_inventory
--- Sistem Inventory & Monitoring Percetakan
+-- Ranum Indocraft — Sistem Inventory & Monitoring Percetakan
 -- ============================================================
 -- CARA IMPORT:
 --   1. Buka phpMyAdmin
@@ -14,7 +14,6 @@ SET time_zone = "+07:00";
 SET FOREIGN_KEY_CHECKS = 0;
 
 -- Drop semua tabel (urutan terbalik karena foreign key)
-DROP TABLE IF EXISTS `machine_logs`;
 DROP TABLE IF EXISTS `notifications`;
 DROP TABLE IF EXISTS `product_materials`;
 DROP TABLE IF EXISTS `order_items`;
@@ -23,259 +22,246 @@ DROP TABLE IF EXISTS `stock_transactions`;
 DROP TABLE IF EXISTS `orders`;
 DROP TABLE IF EXISTS `products`;
 DROP TABLE IF EXISTS `items`;
-DROP TABLE IF EXISTS `machines`;
 DROP TABLE IF EXISTS `customers`;
 DROP TABLE IF EXISTS `units`;
 DROP TABLE IF EXISTS `categories`;
 DROP TABLE IF EXISTS `users`;
 
 -- ============================================================
--- STRUKTUR TABEL (14 tabel)
+-- STRUKTUR TABEL (12 tabel)
 -- ============================================================
 
+-- Tabel: users (Data Pengguna / Akun Login)
 CREATE TABLE `users` (
-  `id`         INT(11) UNSIGNED NOT NULL AUTO_INCREMENT,
-  `name`       VARCHAR(100) NOT NULL,
-  `email`      VARCHAR(100) NOT NULL UNIQUE,
-  `password`   VARCHAR(255) NOT NULL,
-  `role`       ENUM('admin','operator') NOT NULL DEFAULT 'operator',
-  `avatar`     VARCHAR(255) DEFAULT NULL,
-  `is_active`  TINYINT(1) NOT NULL DEFAULT 1,
-  `last_login` DATETIME DEFAULT NULL,
+  `id_users`   INT(11) UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Primary Key',
+  `name`       VARCHAR(100) NOT NULL                   COMMENT 'Nama lengkap pengguna',
+  `email`      VARCHAR(100) NOT NULL UNIQUE             COMMENT 'Email untuk login',
+  `password`   VARCHAR(255) NOT NULL                   COMMENT 'Password ter-hash (bcrypt)',
+  `role`       ENUM('admin','operator') NOT NULL DEFAULT 'operator' COMMENT 'Hak akses: admin / operator',
+  `avatar`     VARCHAR(255) DEFAULT NULL               COMMENT 'Path foto profil',
+  `is_active`  TINYINT(1) NOT NULL DEFAULT 1           COMMENT '1=aktif, 0=nonaktif',
+  `last_login` DATETIME DEFAULT NULL                   COMMENT 'Waktu login terakhir',
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  PRIMARY KEY (`id_users`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='Data akun pengguna sistem';
 
+-- Tabel: categories (Kategori Bahan Baku)
 CREATE TABLE `categories` (
-  `id`          INT(11) UNSIGNED NOT NULL AUTO_INCREMENT,
-  `name`        VARCHAR(100) NOT NULL,
-  `description` TEXT DEFAULT NULL,
-  `color`       VARCHAR(7) DEFAULT '#6366f1',
-  `icon`        VARCHAR(50) DEFAULT 'box',
-  `created_at`  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `updated_at`  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE `units` (
-  `id`         INT(11) UNSIGNED NOT NULL AUTO_INCREMENT,
-  `name`       VARCHAR(50) NOT NULL,
-  `symbol`     VARCHAR(10) NOT NULL,
-  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE `customers` (
-  `id`             INT(11) UNSIGNED NOT NULL AUTO_INCREMENT,
-  `code`           VARCHAR(20) NOT NULL UNIQUE,
-  `name`           VARCHAR(150) NOT NULL,
-  `contact_person` VARCHAR(100) DEFAULT NULL,
-  `phone`          VARCHAR(20) DEFAULT NULL,
-  `email`          VARCHAR(100) DEFAULT NULL,
-  `address`        TEXT DEFAULT NULL,
-  `city`           VARCHAR(100) DEFAULT NULL,
-  `notes`          TEXT DEFAULT NULL,
-  `is_active`      TINYINT(1) NOT NULL DEFAULT 1,
-  `created_at`     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `updated_at`     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE `machines` (
-  `id`               INT(11) UNSIGNED NOT NULL AUTO_INCREMENT,
-  `code`             VARCHAR(20) NOT NULL UNIQUE,
-  `name`             VARCHAR(100) NOT NULL,
-  `type`             VARCHAR(100) DEFAULT NULL,
-  `brand`            VARCHAR(100) DEFAULT NULL,
-  `serial_number`    VARCHAR(100) DEFAULT NULL,
-  `status`           ENUM('active','idle','maintenance','offline') NOT NULL DEFAULT 'idle',
-  `purchase_date`    DATE DEFAULT NULL,
-  `last_maintenance` DATE DEFAULT NULL,
-  `next_maintenance` DATE DEFAULT NULL,
-  `notes`            TEXT DEFAULT NULL,
-  `created_at`       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `updated_at`       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE `items` (
-  `id`             INT(11) UNSIGNED NOT NULL AUTO_INCREMENT,
-  `code`           VARCHAR(30) NOT NULL UNIQUE,
-  `name`           VARCHAR(150) NOT NULL,
-  `category_id`    INT(11) UNSIGNED NOT NULL,
-  `unit_id`        INT(11) UNSIGNED NOT NULL,
-  `description`    TEXT DEFAULT NULL,
-  `image`          VARCHAR(255) DEFAULT NULL,
-  `stock`          DECIMAL(12,2) NOT NULL DEFAULT 0,
-  `min_stock`      DECIMAL(12,2) NOT NULL DEFAULT 0,
-  `max_stock`      DECIMAL(12,2) NOT NULL DEFAULT 0,
-  `purchase_price` DECIMAL(15,2) NOT NULL DEFAULT 0,
-  `selling_price`  DECIMAL(15,2) NOT NULL DEFAULT 0,
-  `location`       VARCHAR(100) DEFAULT NULL,
-  `is_active`      TINYINT(1) NOT NULL DEFAULT 1,
-  `created_at`     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `updated_at`     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  KEY `fk_items_category` (`category_id`),
-  KEY `fk_items_unit` (`unit_id`),
-  CONSTRAINT `fk_items_category` FOREIGN KEY (`category_id`) REFERENCES `categories` (`id`) ON DELETE RESTRICT,
-  CONSTRAINT `fk_items_unit`     FOREIGN KEY (`unit_id`)     REFERENCES `units`      (`id`) ON DELETE RESTRICT
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE `products` (
-  `id`            INT(11) UNSIGNED NOT NULL AUTO_INCREMENT,
-  `code`          VARCHAR(30) NOT NULL UNIQUE,
-  `name`          VARCHAR(150) NOT NULL,
-  `category_id`   INT(11) UNSIGNED DEFAULT NULL,
-  `unit_id`       INT(11) UNSIGNED DEFAULT NULL,
-  `default_price` DECIMAL(15,2) NOT NULL DEFAULT 0,
-  `description`   TEXT DEFAULT NULL,
-  `is_active`     TINYINT(1) NOT NULL DEFAULT 1,
+  `id_categories` INT(11) UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Primary Key',
+  `name`          VARCHAR(100) NOT NULL                   COMMENT 'Nama kategori',
+  `description`   TEXT DEFAULT NULL                       COMMENT 'Keterangan kategori',
+  `color`         VARCHAR(7) DEFAULT '#6366f1'            COMMENT 'Warna hex untuk tampilan',
+  `icon`          VARCHAR(50) DEFAULT 'box'               COMMENT 'Nama ikon Feather',
   `created_at`    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at`    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
+  PRIMARY KEY (`id_categories`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='Kategori bahan baku (kertas, tinta, dll)';
+
+-- Tabel: units (Satuan Bahan Baku)
+CREATE TABLE `units` (
+  `id_units`   INT(11) UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Primary Key',
+  `name`       VARCHAR(50) NOT NULL                    COMMENT 'Nama satuan (Kilogram, Rim, dll)',
+  `symbol`     VARCHAR(10) NOT NULL                    COMMENT 'Simbol satuan (Kg, Rim, dll)',
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id_units`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='Satuan ukuran bahan baku';
+
+-- Tabel: customers (Data Pelanggan)
+CREATE TABLE `customers` (
+  `id_customers`   INT(11) UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Primary Key',
+  `code`           VARCHAR(20) NOT NULL UNIQUE             COMMENT 'Kode unik pelanggan (CUS001)',
+  `name`           VARCHAR(150) NOT NULL                   COMMENT 'Nama pelanggan / perusahaan',
+  `contact_person` VARCHAR(100) DEFAULT NULL               COMMENT 'Nama kontak PIC',
+  `phone`          VARCHAR(20) DEFAULT NULL                COMMENT 'Nomor telepon / WhatsApp',
+  `email`          VARCHAR(100) DEFAULT NULL               COMMENT 'Alamat email pelanggan',
+  `address`        TEXT DEFAULT NULL                       COMMENT 'Alamat lengkap',
+  `city`           VARCHAR(100) DEFAULT NULL               COMMENT 'Kota',
+  `notes`          TEXT DEFAULT NULL                       COMMENT 'Catatan tambahan',
+  `is_active`      TINYINT(1) NOT NULL DEFAULT 1           COMMENT '1=aktif, 0=nonaktif',
+  `created_at`     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id_customers`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='Data pelanggan percetakan';
+
+-- Tabel: items (Bahan Baku / Inventory)
+CREATE TABLE `items` (
+  `id_items`       INT(11) UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Primary Key',
+  `code`           VARCHAR(30) NOT NULL UNIQUE             COMMENT 'Kode unik bahan (ITM001)',
+  `name`           VARCHAR(150) NOT NULL                   COMMENT 'Nama bahan baku',
+  `category_id`    INT(11) UNSIGNED NOT NULL               COMMENT 'FK → categories.id_categories',
+  `unit_id`        INT(11) UNSIGNED NOT NULL               COMMENT 'FK → units.id_units',
+  `description`    TEXT DEFAULT NULL                       COMMENT 'Keterangan bahan',
+  `image`          VARCHAR(255) DEFAULT NULL               COMMENT 'Path foto bahan',
+  `stock`          DECIMAL(12,2) NOT NULL DEFAULT 0        COMMENT 'Stok saat ini',
+  `min_stock`      DECIMAL(12,2) NOT NULL DEFAULT 0        COMMENT 'Batas minimum stok (peringatan)',
+  `max_stock`      DECIMAL(12,2) NOT NULL DEFAULT 0        COMMENT 'Batas maksimum stok',
+  `purchase_price` DECIMAL(15,2) NOT NULL DEFAULT 0        COMMENT 'Harga beli per satuan (Rp)',
+  `selling_price`  DECIMAL(15,2) NOT NULL DEFAULT 0        COMMENT 'Harga jual per satuan (Rp)',
+  `location`       VARCHAR(100) DEFAULT NULL               COMMENT 'Lokasi penyimpanan di gudang',
+  `is_active`      TINYINT(1) NOT NULL DEFAULT 1           COMMENT '1=aktif, 0=nonaktif',
+  `created_at`     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id_items`),
+  KEY `fk_items_category` (`category_id`),
+  KEY `fk_items_unit`     (`unit_id`),
+  CONSTRAINT `fk_items_category` FOREIGN KEY (`category_id`) REFERENCES `categories` (`id_categories`) ON DELETE RESTRICT,
+  CONSTRAINT `fk_items_unit`     FOREIGN KEY (`unit_id`)     REFERENCES `units`      (`id_units`)      ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='Data bahan baku dan stok inventory';
+
+-- Tabel: products (Produk / Jasa Percetakan)
+CREATE TABLE `products` (
+  `id_products`   INT(11) UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Primary Key',
+  `code`          VARCHAR(30) NOT NULL UNIQUE             COMMENT 'Kode unik produk (PRD001)',
+  `name`          VARCHAR(150) NOT NULL                   COMMENT 'Nama produk / jasa',
+  `category_id`   INT(11) UNSIGNED DEFAULT NULL           COMMENT 'FK → categories.id_categories',
+  `unit_id`       INT(11) UNSIGNED DEFAULT NULL           COMMENT 'FK → units.id_units',
+  `default_price` DECIMAL(15,2) NOT NULL DEFAULT 0        COMMENT 'Harga jual default (Rp)',
+  `description`   TEXT DEFAULT NULL                       COMMENT 'Keterangan produk',
+  `is_active`     TINYINT(1) NOT NULL DEFAULT 1           COMMENT '1=aktif, 0=nonaktif',
+  `created_at`    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id_products`),
   KEY `fk_products_category` (`category_id`),
   KEY `fk_products_unit`     (`unit_id`),
-  CONSTRAINT `fk_products_category` FOREIGN KEY (`category_id`) REFERENCES `categories` (`id`) ON DELETE SET NULL,
-  CONSTRAINT `fk_products_unit`     FOREIGN KEY (`unit_id`)     REFERENCES `units`      (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  CONSTRAINT `fk_products_category` FOREIGN KEY (`category_id`) REFERENCES `categories` (`id_categories`) ON DELETE SET NULL,
+  CONSTRAINT `fk_products_unit`     FOREIGN KEY (`unit_id`)     REFERENCES `units`      (`id_units`)      ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='Daftar produk dan jasa percetakan';
 
+-- Tabel: product_materials (BOM — Bill of Materials)
 CREATE TABLE `product_materials` (
-  `id`           INT(11) UNSIGNED NOT NULL AUTO_INCREMENT,
-  `product_id`   INT(11) UNSIGNED NOT NULL COMMENT 'Produk jasa',
-  `item_id`      INT(11) UNSIGNED NOT NULL COMMENT 'Bahan baku yang dipakai',
-  `qty_per_unit` DECIMAL(12,4) NOT NULL DEFAULT 1 COMMENT 'Qty bahan per 1 pcs produk',
-  `notes`        VARCHAR(200) DEFAULT NULL,
-  `created_at`   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
+  `id_product_materials` INT(11) UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Primary Key',
+  `product_id`           INT(11) UNSIGNED NOT NULL               COMMENT 'FK → products.id_products',
+  `item_id`              INT(11) UNSIGNED NOT NULL               COMMENT 'FK → items.id_items',
+  `qty_per_unit`         DECIMAL(12,4) NOT NULL DEFAULT 1        COMMENT 'Jumlah bahan per 1 pcs produk',
+  `notes`                VARCHAR(200) DEFAULT NULL               COMMENT 'Keterangan tambahan',
+  `created_at`           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id_product_materials`),
   UNIQUE KEY `uk_product_item` (`product_id`, `item_id`),
   KEY `fk_pm_product` (`product_id`),
   KEY `fk_pm_item`    (`item_id`),
-  CONSTRAINT `fk_pm_product` FOREIGN KEY (`product_id`) REFERENCES `products` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_pm_item`    FOREIGN KEY (`item_id`)    REFERENCES `items`    (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  CONSTRAINT `fk_pm_product` FOREIGN KEY (`product_id`) REFERENCES `products` (`id_products`) ON DELETE CASCADE,
+  CONSTRAINT `fk_pm_item`    FOREIGN KEY (`item_id`)    REFERENCES `items`    (`id_items`)    ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='Bill of Materials — kebutuhan bahan per produk';
 
+-- Tabel: orders (Data Order Cetak)
 CREATE TABLE `orders` (
-  `id`             INT(11) UNSIGNED NOT NULL AUTO_INCREMENT,
-  `order_number`   VARCHAR(30) NOT NULL UNIQUE,
-  `customer_id`    INT(11) UNSIGNED NOT NULL,
-  `machine_id`     INT(11) UNSIGNED DEFAULT NULL,
-  `operator_id`    INT(11) UNSIGNED DEFAULT NULL,
-  `title`          VARCHAR(200) NOT NULL,
-  `description`    TEXT DEFAULT NULL,
-  `status`         ENUM('pending','confirmed','in_progress','quality_check','completed','cancelled') NOT NULL DEFAULT 'pending',
-  `priority`       ENUM('low','normal','high','urgent') NOT NULL DEFAULT 'normal',
-  `quantity`       INT(11) NOT NULL DEFAULT 1,
-  `unit_price`     DECIMAL(15,2) NOT NULL DEFAULT 0,
-  `total_price`    DECIMAL(15,2) NOT NULL DEFAULT 0,
-  `discount`       DECIMAL(15,2) NOT NULL DEFAULT 0,
-  `tax`            DECIMAL(5,2) NOT NULL DEFAULT 0,
-  `grand_total`    DECIMAL(15,2) NOT NULL DEFAULT 0,
-  `start_date`     DATE DEFAULT NULL,
-  `due_date`       DATE DEFAULT NULL,
-  `completed_date` DATETIME DEFAULT NULL,
-  `notes`          TEXT DEFAULT NULL,
-  `created_by`     INT(11) UNSIGNED DEFAULT NULL,
+  `id_orders`      INT(11) UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Primary Key',
+  `order_number`   VARCHAR(30) NOT NULL UNIQUE             COMMENT 'Nomor order unik (ORD-2507-0001)',
+  `customer_id`    INT(11) UNSIGNED NOT NULL               COMMENT 'FK → customers.id_customers',
+  `operator_id`    INT(11) UNSIGNED DEFAULT NULL           COMMENT 'FK → users.id_users (operator)',
+  `title`          VARCHAR(200) NOT NULL                   COMMENT 'Judul / nama pesanan',
+  `description`    TEXT DEFAULT NULL                       COMMENT 'Keterangan detail pesanan',
+  `status`         ENUM('pending','confirmed','in_progress','quality_check','completed','cancelled') NOT NULL DEFAULT 'pending' COMMENT 'Status produksi order',
+  `priority`       ENUM('low','normal','high','urgent') NOT NULL DEFAULT 'normal' COMMENT 'Tingkat prioritas pengerjaan',
+  `quantity`       INT(11) NOT NULL DEFAULT 1              COMMENT 'Total jumlah pesanan',
+  `unit_price`     DECIMAL(15,2) NOT NULL DEFAULT 0        COMMENT 'Harga satuan (Rp)',
+  `total_price`    DECIMAL(15,2) NOT NULL DEFAULT 0        COMMENT 'Total sebelum diskon & pajak (Rp)',
+  `discount`       DECIMAL(15,2) NOT NULL DEFAULT 0        COMMENT 'Potongan harga (Rp)',
+  `tax`            DECIMAL(5,2) NOT NULL DEFAULT 0         COMMENT 'Persentase PPN (%)',
+  `grand_total`    DECIMAL(15,2) NOT NULL DEFAULT 0        COMMENT 'Total akhir setelah diskon & pajak (Rp)',
+  `start_date`     DATE DEFAULT NULL                       COMMENT 'Tanggal mulai produksi',
+  `due_date`       DATE DEFAULT NULL                       COMMENT 'Tanggal jatuh tempo selesai',
+  `completed_date` DATETIME DEFAULT NULL                   COMMENT 'Waktu order benar-benar selesai',
+  `notes`          TEXT DEFAULT NULL                       COMMENT 'Catatan / instruksi khusus',
+  `created_by`     INT(11) UNSIGNED DEFAULT NULL           COMMENT 'FK → users.id_users (pembuat order)',
   `created_at`     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at`     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  KEY `fk_orders_customer` (`customer_id`),
-  KEY `fk_orders_machine`  (`machine_id`),
-  KEY `fk_orders_operator` (`operator_id`),
-  CONSTRAINT `fk_orders_customer` FOREIGN KEY (`customer_id`) REFERENCES `customers` (`id`) ON DELETE RESTRICT,
-  CONSTRAINT `fk_orders_machine`  FOREIGN KEY (`machine_id`)  REFERENCES `machines`  (`id`) ON DELETE SET NULL,
-  CONSTRAINT `fk_orders_operator` FOREIGN KEY (`operator_id`) REFERENCES `users`     (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  PRIMARY KEY (`id_orders`),
+  KEY `fk_orders_customer`  (`customer_id`),
+  KEY `fk_orders_operator`  (`operator_id`),
+  CONSTRAINT `fk_orders_customer`  FOREIGN KEY (`customer_id`)  REFERENCES `customers` (`id_customers`) ON DELETE RESTRICT,
+  CONSTRAINT `fk_orders_operator`  FOREIGN KEY (`operator_id`)  REFERENCES `users`     (`id_users`)     ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='Data order cetak dari pelanggan';
 
+-- Tabel: order_items (Detail Item dalam Order)
 CREATE TABLE `order_items` (
-  `id`         INT(11) UNSIGNED NOT NULL AUTO_INCREMENT,
-  `order_id`   INT(11) UNSIGNED NOT NULL,
-  `item_id`    INT(11) UNSIGNED NOT NULL,
-  `quantity`   DECIMAL(12,2) NOT NULL,
-  `unit_price` DECIMAL(15,2) NOT NULL DEFAULT 0,
-  `notes`      TEXT DEFAULT NULL,
-  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
+  `id_order_items` INT(11) UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Primary Key',
+  `order_id`       INT(11) UNSIGNED NOT NULL               COMMENT 'FK → orders.id_orders',
+  `item_id`        INT(11) UNSIGNED NOT NULL               COMMENT 'FK → items.id_items (bahan terpakai)',
+  `quantity`       DECIMAL(12,2) NOT NULL                  COMMENT 'Jumlah bahan yang dipakai',
+  `unit_price`     DECIMAL(15,2) NOT NULL DEFAULT 0        COMMENT 'Harga bahan saat order dibuat (Rp)',
+  `notes`          TEXT DEFAULT NULL                       COMMENT 'Keterangan tambahan',
+  `created_at`     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id_order_items`),
   KEY `fk_order_items_order` (`order_id`),
   KEY `fk_order_items_item`  (`item_id`),
-  CONSTRAINT `fk_order_items_order` FOREIGN KEY (`order_id`) REFERENCES `orders` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_order_items_item`  FOREIGN KEY (`item_id`)  REFERENCES `items`  (`id`) ON DELETE RESTRICT
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  CONSTRAINT `fk_order_items_order` FOREIGN KEY (`order_id`) REFERENCES `orders` (`id_orders`) ON DELETE CASCADE,
+  CONSTRAINT `fk_order_items_item`  FOREIGN KEY (`item_id`)  REFERENCES `items`  (`id_items`)  ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='Detail bahan baku yang dipakai per order';
 
+-- Tabel: deliveries (Data Pengiriman)
 CREATE TABLE `deliveries` (
-  `id`                  INT(11) UNSIGNED NOT NULL AUTO_INCREMENT,
-  `order_id`            INT(11) UNSIGNED NOT NULL,
-  `status`              ENUM('prepared','shipping','arrived','received') NOT NULL DEFAULT 'prepared',
-  `destination_address` TEXT DEFAULT NULL,
-  `destination_city`    VARCHAR(100) DEFAULT NULL,
-  `recipient_name`      VARCHAR(150) DEFAULT NULL,
-  `recipient_phone`     VARCHAR(20) DEFAULT NULL,
-  `estimated_arrival`   DATE DEFAULT NULL,
-  `actual_arrival`      DATETIME DEFAULT NULL,
-  `proof_image`         VARCHAR(255) DEFAULT NULL COMMENT 'Foto bukti pengiriman diterima',
-  `notes`               TEXT DEFAULT NULL,
-  `created_by`          INT(11) UNSIGNED DEFAULT NULL,
+  `id_deliveries`       INT(11) UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Primary Key',
+  `order_id`            INT(11) UNSIGNED NOT NULL               COMMENT 'FK → orders.id_orders',
+  `status`              ENUM('prepared','shipping','arrived','received') NOT NULL DEFAULT 'prepared' COMMENT 'Status pengiriman',
+  `destination_address` TEXT DEFAULT NULL                       COMMENT 'Alamat tujuan pengiriman',
+  `destination_city`    VARCHAR(100) DEFAULT NULL               COMMENT 'Kota tujuan',
+  `recipient_name`      VARCHAR(150) DEFAULT NULL               COMMENT 'Nama penerima',
+  `recipient_phone`     VARCHAR(20) DEFAULT NULL                COMMENT 'Nomor HP penerima',
+  `estimated_arrival`   DATE DEFAULT NULL                       COMMENT 'Estimasi tanggal tiba',
+  `actual_arrival`      DATETIME DEFAULT NULL                   COMMENT 'Waktu tiba sebenarnya',
+  `proof_image`         VARCHAR(255) DEFAULT NULL               COMMENT 'Path foto bukti pengiriman diterima',
+  `notes`               TEXT DEFAULT NULL                       COMMENT 'Catatan pengiriman',
+  `created_by`          INT(11) UNSIGNED DEFAULT NULL           COMMENT 'FK → users.id_users',
   `created_at`          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at`          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
+  PRIMARY KEY (`id_deliveries`),
   UNIQUE KEY `uk_delivery_order` (`order_id`),
   KEY `fk_delivery_order`   (`order_id`),
   KEY `fk_delivery_creator` (`created_by`),
-  CONSTRAINT `fk_delivery_order`   FOREIGN KEY (`order_id`)   REFERENCES `orders` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_delivery_creator` FOREIGN KEY (`created_by`) REFERENCES `users`  (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  CONSTRAINT `fk_delivery_order`   FOREIGN KEY (`order_id`)   REFERENCES `orders` (`id_orders`) ON DELETE CASCADE,
+  CONSTRAINT `fk_delivery_creator` FOREIGN KEY (`created_by`) REFERENCES `users`  (`id_users`)  ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='Data pengiriman order ke pelanggan';
 
+-- Tabel: stock_transactions (Riwayat Mutasi Stok)
 CREATE TABLE `stock_transactions` (
-  `id`             INT(11) UNSIGNED NOT NULL AUTO_INCREMENT,
-  `item_id`        INT(11) UNSIGNED NOT NULL,
-  `type`           ENUM('in','out','adjustment','return') NOT NULL,
-  `reference_type` ENUM('purchase','order','adjustment','return','initial') NOT NULL DEFAULT 'adjustment',
-  `reference_id`   INT(11) UNSIGNED DEFAULT NULL,
-  `quantity`       DECIMAL(12,2) NOT NULL,
-  `stock_before`   DECIMAL(12,2) NOT NULL,
-  `stock_after`    DECIMAL(12,2) NOT NULL,
-  `unit_price`     DECIMAL(15,2) NOT NULL DEFAULT 0,
-  `notes`          TEXT DEFAULT NULL,
-  `created_by`     INT(11) UNSIGNED DEFAULT NULL,
-  `created_at`     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
+  `id_stock_transactions` INT(11) UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Primary Key',
+  `item_id`               INT(11) UNSIGNED NOT NULL               COMMENT 'FK → items.id_items',
+  `type`                  ENUM('in','out','adjustment','return') NOT NULL COMMENT 'Jenis mutasi: masuk/keluar/penyesuaian/retur',
+  `reference_type`        ENUM('purchase','order','adjustment','return','initial') NOT NULL DEFAULT 'adjustment' COMMENT 'Asal transaksi',
+  `reference_id`          INT(11) UNSIGNED DEFAULT NULL           COMMENT 'ID referensi (misal id_orders)',
+  `quantity`              DECIMAL(12,2) NOT NULL                  COMMENT 'Jumlah yang berubah',
+  `stock_before`          DECIMAL(12,2) NOT NULL                  COMMENT 'Stok sebelum transaksi',
+  `stock_after`           DECIMAL(12,2) NOT NULL                  COMMENT 'Stok sesudah transaksi',
+  `unit_price`            DECIMAL(15,2) NOT NULL DEFAULT 0        COMMENT 'Harga satuan saat transaksi (Rp)',
+  `notes`                 TEXT DEFAULT NULL                       COMMENT 'Keterangan transaksi',
+  `created_by`            INT(11) UNSIGNED DEFAULT NULL           COMMENT 'FK → users.id_users',
+  `created_at`            DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id_stock_transactions`),
   KEY `fk_stocktx_item` (`item_id`),
   KEY `fk_stocktx_user` (`created_by`),
-  CONSTRAINT `fk_stocktx_item` FOREIGN KEY (`item_id`)    REFERENCES `items` (`id`) ON DELETE RESTRICT,
-  CONSTRAINT `fk_stocktx_user` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  CONSTRAINT `fk_stocktx_item` FOREIGN KEY (`item_id`)    REFERENCES `items` (`id_items`) ON DELETE RESTRICT,
+  CONSTRAINT `fk_stocktx_user` FOREIGN KEY (`created_by`) REFERENCES `users` (`id_users`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='Riwayat semua mutasi stok bahan baku (FIFO log)';
 
-CREATE TABLE `machine_logs` (
-  `id`               INT(11) UNSIGNED NOT NULL AUTO_INCREMENT,
-  `machine_id`       INT(11) UNSIGNED NOT NULL,
-  `order_id`         INT(11) UNSIGNED DEFAULT NULL,
-  `event`            ENUM('start','pause','resume','stop','error','maintenance_start','maintenance_end') NOT NULL,
-  `description`      TEXT DEFAULT NULL,
-  `operator_id`      INT(11) UNSIGNED DEFAULT NULL,
-  `duration_minutes` INT(11) DEFAULT NULL,
-  `created_at`       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  KEY `fk_machinelogs_machine` (`machine_id`),
-  KEY `fk_machinelogs_order`   (`order_id`),
-  CONSTRAINT `fk_machinelogs_machine` FOREIGN KEY (`machine_id`) REFERENCES `machines` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_machinelogs_order`   FOREIGN KEY (`order_id`)   REFERENCES `orders`   (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
+-- Tabel: notifications (Notifikasi Sistem)
 CREATE TABLE `notifications` (
-  `id`             INT(11) UNSIGNED NOT NULL AUTO_INCREMENT,
-  `type`           ENUM('low_stock','order_status','machine_alert','system','maintenance') NOT NULL,
-  `title`          VARCHAR(200) NOT NULL,
-  `message`        TEXT NOT NULL,
-  `reference_type` VARCHAR(50) DEFAULT NULL,
-  `reference_id`   INT(11) UNSIGNED DEFAULT NULL,
-  `is_read`        TINYINT(1) NOT NULL DEFAULT 0,
-  `user_id`        INT(11) UNSIGNED DEFAULT NULL,
-  `created_at`     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
+  `id_notifications` INT(11) UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Primary Key',
+  `type`             ENUM('low_stock','order_status','system','maintenance') NOT NULL COMMENT 'Jenis notifikasi',
+  `title`            VARCHAR(200) NOT NULL                   COMMENT 'Judul notifikasi',
+  `message`          TEXT NOT NULL                           COMMENT 'Isi pesan notifikasi',
+  `reference_type`   VARCHAR(50) DEFAULT NULL                COMMENT 'Tipe referensi (orders, items, dll)',
+  `reference_id`     INT(11) UNSIGNED DEFAULT NULL           COMMENT 'ID data yang dirujuk',
+  `is_read`          TINYINT(1) NOT NULL DEFAULT 0           COMMENT '0=belum dibaca, 1=sudah dibaca',
+  `user_id`          INT(11) UNSIGNED DEFAULT NULL           COMMENT 'FK → users.id_users (penerima)',
+  `created_at`       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id_notifications`),
   KEY `fk_notif_user` (`user_id`),
-  CONSTRAINT `fk_notif_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  CONSTRAINT `fk_notif_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id_users`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='Notifikasi sistem (stok kritis, status order, dll)';
 
 SET FOREIGN_KEY_CHECKS = 1;
 
@@ -285,8 +271,8 @@ SET FOREIGN_KEY_CHECKS = 1;
 
 -- Users (password semua = "password")
 INSERT INTO `users` (`name`, `email`, `password`, `role`) VALUES
-('Administrator', 'admin@percetakan.com',    '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'admin'),
-('Operator 1',    'operator1@percetakan.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'operator');
+('Administrator', 'admin@ranumindocraft.com',    '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'admin'),
+('Operator 1',    'operator1@ranumindocraft.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'operator');
 
 -- Units
 INSERT INTO `units` (`name`, `symbol`) VALUES
@@ -317,14 +303,6 @@ INSERT INTO `customers` (`code`, `name`, `contact_person`, `phone`, `city`) VALU
 ('CUS003', 'Toko Buku Cerdas',   'Maya Sari',      '0856-1234567', 'Surabaya'),
 ('CUS004', 'PT. Advertise Pro',  'Hendra Gunawan', '0811-5432198', 'Jakarta'),
 ('CUS005', 'UD. Paket Hemat',    'Siti Aminah',    '0821-7654321', 'Yogyakarta');
-
--- Machines
-INSERT INTO `machines` (`code`, `name`, `type`, `brand`, `status`) VALUES
-('MCH001', 'Mesin Offset 1',   'Offset Printing',     'Heidelberg', 'active'),
-('MCH002', 'Mesin Offset 2',   'Offset Printing',     'Komori',     'idle'),
-('MCH003', 'Mesin Digital 1',  'Digital Printing',    'HP Indigo',  'active'),
-('MCH004', 'Mesin Cutting',    'Cutting & Finishing', 'Polar',      'idle'),
-('MCH005', 'Mesin Laminating', 'Finishing',            'GMP',        'maintenance');
 
 -- Items (Bahan Baku)
 INSERT INTO `items` (`code`, `name`, `category_id`, `unit_id`, `stock`, `min_stock`, `max_stock`, `purchase_price`, `location`) VALUES
@@ -357,13 +335,13 @@ INSERT INTO `products` (`code`, `name`, `category_id`, `unit_id`, `default_price
 ('PRD012', 'Laminating',           6, 9, 15000,  'Laminating glossy/doff, per meter persegi');
 
 -- ============================================================
--- SELESAI — 14 tabel aktif:
---   users, categories, units, customers, machines,
+-- SELESAI — 12 tabel aktif:
+--   users, categories, units, customers,
 --   items, products, product_materials, orders,
 --   order_items, deliveries, stock_transactions,
---   machine_logs, notifications
+--   notifications
 -- ============================================================
 -- AKUN LOGIN (password = "password"):
---   admin@percetakan.com     → Admin (akses penuh)
---   operator1@percetakan.com → Operator
+--   admin@ranumindocraft.com     → Admin (akses penuh)
+--   operator1@ranumindocraft.com → Operator
 -- ============================================================

@@ -13,7 +13,6 @@ window.onunhandledrejection = (e) => {
 const API = 'api/';
 let chartOrders = null;
 let chartStock  = null;
-let monitorInterval = null;
 let currentPage = 'dashboard';
 let currentReportType = 'stock';
 
@@ -43,7 +42,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Baca hash URL untuk navigasi langsung (misal dari order_baru.php#orders)
   const hashPage = window.location.hash.replace('#', '');
-  const validPages = ['dashboard','monitoring','items','stock-mutation','order-input','orders','deliveries','machines','customers','products','reports'];
+  const validPages = ['dashboard','monitoring','items','stock-mutation','order-input','orders','deliveries','customers','products','reports','manage-users'];
   navigate(validPages.includes(hashPage) ? hashPage : 'dashboard');
 
   // Report date defaults
@@ -53,6 +52,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   const rt = document.getElementById('report-to');
   if (rf) rf.value = monthStart;
   if (rt) rt.value = today;
+
+  // Polling badge sidebar secara realtime (setiap 10 detik)
+  startBadgePolling();
 });
 
 // ============================================================
@@ -131,17 +133,81 @@ function startClock() {
 }
 
 // ============================================================
+// BADGE POLLING — update sidebar badge secara realtime
+// ============================================================
+let _prevActiveOrders  = -1;
+let _prevLowStock      = -1;
+let _prevInTransit     = -1;
+
+async function updateSidebarBadges() {
+  const data = await apiFetch(API + 'dashboard.php?action=badges');
+  if (!data?.success) return;
+
+  const activeOrders = parseInt(data.active_orders) || 0;
+  const lowStock     = parseInt(data.low_stock)     || 0;
+  const inTransit    = parseInt(data.in_transit)    || 0;
+
+  // Badge Tracking Realtime
+  const badgeActive = document.getElementById('badge-active');
+  if (badgeActive) {
+    badgeActive.textContent = activeOrders;
+    // Animasi flash kalau angka berubah naik
+    if (_prevActiveOrders !== -1 && activeOrders !== _prevActiveOrders) {
+      badgeActive.style.transition = 'none';
+      badgeActive.style.transform  = 'scale(1.5)';
+      badgeActive.style.background = activeOrders > _prevActiveOrders ? '#10b981' : '#ef4444';
+      setTimeout(() => {
+        badgeActive.style.transition = 'all .3s ease';
+        badgeActive.style.transform  = 'scale(1)';
+        badgeActive.style.background = '';
+      }, 300);
+    }
+    _prevActiveOrders = activeOrders;
+  }
+
+  // Badge Stok Kritis
+  const badgeLow = document.getElementById('badge-lowstock');
+  if (badgeLow) {
+    if (lowStock > 0) {
+      badgeLow.style.display = 'inline';
+      badgeLow.textContent   = lowStock;
+    } else {
+      badgeLow.style.display = 'none';
+    }
+    _prevLowStock = lowStock;
+  }
+
+  // Badge Pengiriman
+  const badgeDel = document.getElementById('badge-deliveries');
+  if (badgeDel) {
+    badgeDel.textContent   = inTransit;
+    badgeDel.style.display = inTransit > 0 ? 'inline' : 'none';
+    _prevInTransit = inTransit;
+  }
+
+  // Kalau di dashboard, update stat cards juga tanpa reload penuh
+  if (currentPage === 'dashboard') {
+    const el = document.getElementById('stat-orders');
+    if (el) el.textContent = data.active_orders;
+  }
+}
+
+function startBadgePolling() {
+  updateSidebarBadges();                          // langsung sekali saat load
+  setInterval(updateSidebarBadges, 10000);        // lalu setiap 10 detik
+}
+
+// ============================================================
 // NAVIGATION
 // ============================================================
 const pageTitles = {
   dashboard:        ['Dashboard', 'Overview semua aktivitas'],
-  monitoring:       ['Monitoring Realtime', 'Status mesin & order live'],
+  monitoring:       ['MES Monitoring', 'Antrian FIFO & pipeline produksi realtime'],
   items:            ['Bahan Baku', 'Kelola inventory material'],
   'stock-mutation': ['Mutasi Stok', 'Stok masuk & keluar'],
   'order-input':    ['Input Order Baru', 'Isi data pelanggan & pesanan, nota langsung tercetak'],
   orders:           ['Order Cetak', 'Manajemen pesanan pelanggan'],
   deliveries:       ['Pengiriman', 'Monitoring pengiriman ke pelanggan'],
-  machines:         ['Mesin', 'Status & log mesin'],
   customers:        ['Pelanggan', 'Riwayat pelanggan & order'],
   products:         ['Produk & Harga', 'Daftar produk/jasa percetakan'],
   reports:          ['Laporan', 'Analisis & ekspor data'],
@@ -162,24 +228,24 @@ function navigate(page) {
   const [title, sub] = pageTitles[page] || [page, ''];
   document.getElementById('page-title').innerHTML = title + ` <span>${sub}</span>`;
 
-  // Stop monitoring interval if leaving
-  if (page !== 'monitoring' && monitorInterval) {
-    clearInterval(monitorInterval);
-    monitorInterval = null;
+  // Stop tracking interval kalau pindah halaman
+  if (page !== 'monitoring' && trackingInterval) {
+    clearInterval(trackingInterval);
+    trackingInterval = null;
   }
 
   // Load page data
   switch (page) {
     case 'dashboard':      loadDashboard(); break;
-    case 'monitoring':     loadMonitoring(); startMonitorInterval(); break;
+    case 'monitoring':     loadMonitoring(); break;
     case 'items':          loadItems(); break;
     case 'stock-mutation': loadStockMutationPage(); break;
     case 'order-input':    loadOrderInputPage(); break;
     case 'orders':         currentOrdersTab = 'active'; loadOrders(); break;
     case 'deliveries':     currentDeliveriesTab = 'active'; loadDeliveries(); break;
-    case 'machines':       loadMachinesPage(); break;
     case 'customers':      loadCustomers(); break;
     case 'products':       loadProducts(); break;
+    case 'reports':        loadReport(); break;
     case 'manage-users':   loadUsers(); break;
   }
 
@@ -192,7 +258,7 @@ function openQuickAdd() {
     'order-input': niSimpanOrder,
     orders:        () => navigate('order-input'),
     deliveries:    () => showToast('Pilih order yang sudah selesai untuk membuat pengiriman', 'info'),
-    customers:     () => navigate('order-input'),
+    customers:     openAddCustomerModal,
   };
   if (map[currentPage]) map[currentPage]();
   else showToast('Pilih halaman yang sesuai untuk menambah data', 'info');
@@ -216,17 +282,17 @@ function populateFormSelects() {
 
   // Item form — category & unit selects
   setSelect('item-category', '<option value="">-- Pilih Kategori --</option>');
-  refCategories.forEach(c => appendSelect('item-category', `<option value="${c.id}">${c.name}</option>`));
+  refCategories.forEach(c => appendSelect('item-category', `<option value="${c.id_categories}">${c.name}</option>`));
 
   setSelect('item-unit', '<option value="">-- Pilih Satuan --</option>');
-  refUnits.forEach(u => appendSelect('item-unit', `<option value="${u.id}">${u.name} (${u.symbol})</option>`));
+  refUnits.forEach(u => appendSelect('item-unit', `<option value="${u.id_units}">${u.name} (${u.symbol})</option>`));
 
   // Category filter on items page
-  refCategories.forEach(c => appendSelect('items-cat-filter', `<option value="${c.id}">${c.name}</option>`));
+  refCategories.forEach(c => appendSelect('items-cat-filter', `<option value="${c.id_categories}">${c.name}</option>`));
 }
 
 function populateItemSelects(items) {
-  const opts = items.map(i => `<option value="${i.id}">${i.code} — ${i.name}</option>`).join('');
+  const opts = items.map(i => `<option value="${i.id_items}">${i.code} — ${i.name}</option>`).join('');
   document.getElementById('in-item-id').innerHTML = '<option value="">-- Pilih Item --</option>' + opts;
   document.getElementById('out-item-id').innerHTML = '<option value="">-- Pilih Item --</option>' + opts;
   document.getElementById('mutation-item-filter').innerHTML = '<option value="">Semua Item</option>' + opts;
@@ -272,15 +338,13 @@ async function loadDashboard() {
   document.getElementById('stat-revenue').textContent = formatCurrency(s.monthly_revenue);
   document.getElementById('stat-revenue-sub').textContent = 'Bulan ini';
 
-  // Badge
+  // Badge — sinkron juga ke state polling supaya tidak trigger animasi palsu
   document.getElementById('badge-active').textContent = s.active_orders;
+  _prevActiveOrders = parseInt(s.active_orders) || 0;
   if (s.low_stock > 0) {
     document.getElementById('badge-lowstock').style.display = 'inline';
     document.getElementById('badge-lowstock').textContent = s.low_stock;
   }
-
-  // Machines
-  renderDashboardMachines(data.machines);
 
   // Low Stock
   renderDashboardLowStock(data.low_stock);
@@ -293,21 +357,6 @@ async function loadDashboard() {
   renderStockChart(data.chart_stock);
 
   feather.replace();
-}
-
-function renderDashboardMachines(machines) {
-  const el = document.getElementById('dashboard-machines');
-  if (!machines?.length) { el.innerHTML = '<div class="text-muted text-sm" style="padding:16px">Tidak ada data mesin</div>'; return; }
-  el.innerHTML = machines.map(m => `
-    <div style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--bg-base);border-radius:var(--radius-sm);border:1px solid var(--border);margin-bottom:8px">
-      <div style="width:10px;height:10px;border-radius:50%;background:${machineStatusColor(m.status)};flex-shrink:0;box-shadow:0 0 6px ${machineStatusColor(m.status)}"></div>
-      <div style="flex:1">
-        <div style="font-size:13px;font-weight:600">${m.name}</div>
-        <div style="font-size:11px;color:var(--text-muted)">${m.current_job ? `<i class="bi bi-arrow-repeat"></i> ${m.current_job}` : 'Tidak ada pekerjaan'}</div>
-      </div>
-      <span class="badge badge-${m.status}">${statusLabel(m.status)}</span>
-    </div>
-  `).join('');
 }
 
 function renderDashboardLowStock(items) {
@@ -469,94 +518,232 @@ function renderStockChart(data) {
 }
 
 // ============================================================
-// MONITORING
+// MES MONITORING + FIFO TRACKING
 // ============================================================
-function startMonitorInterval() {
-  // Clear dulu jika sudah ada (hindari interval leak)
-  if (monitorInterval) { clearInterval(monitorInterval); monitorInterval = null; }
-  loadMonitoring();
-  monitorInterval = setInterval(loadMonitoring, 15000);
-}
+let trackingInterval = null;
 
 async function loadMonitoring() {
-  const data = await apiFetch(API + 'machines.php?action=list');
-  if (!data?.success) return;
-  renderMachineGrid(data.machines || data.data, 'machine-grid');
+  if (trackingInterval) clearInterval(trackingInterval);
+  await renderMesMonitoring();
+  trackingInterval = setInterval(renderMesMonitoring, 5000);
+}
 
-  const kanban = await apiFetch(API + 'orders.php?action=kanban');
-  if (kanban?.success) renderKanban(kanban.data);
+async function renderMesMonitoring() {
+  const res = await apiFetch(API + 'orders.php?action=mes_monitoring');
+  if (!res?.success) return;
+
+  const { fifo_queue, pipeline, stats } = res;
+  const board = document.getElementById('kanban-board');
+
+  // ── Kartu KPI ──────────────────────────────────────────────
+  const avgHours = stats.avg_minutes ? formatLeadTime(parseFloat(stats.avg_minutes) / 60) : '—';
+  const kpiHtml = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:14px;margin-bottom:24px">
+      ${[
+        { label:'Order Aktif',       val: stats.active     || 0, icon:'activity',      color:'#6366f1', bg:'rgba(99,102,241,0.12)'  },
+        { label:'Sedang Diproses',   val: stats.in_progress|| 0, icon:'zap',           color:'#fbbf24', bg:'rgba(251,191,36,0.12)'  },
+        { label:'Selesai Hari Ini',  val: stats.done_today || 0, icon:'check-circle',  color:'#10b981', bg:'rgba(16,185,129,0.12)'  },
+        { label:'Overdue',           val: stats.overdue    || 0, icon:'alert-triangle',color:'#ef4444', bg:'rgba(239,68,68,0.12)'   },
+        { label:'Avg Lead Time',     val: avgHours,          icon:'clock',           color:'#06b6d4', bg:'rgba(6,182,212,0.12)'   },
+      ].map(k => `
+        <div style="background:${k.bg};border:1px solid ${k.color}33;border-radius:12px;padding:16px 18px;display:flex;align-items:center;gap:14px">
+          <div style="width:38px;height:38px;border-radius:10px;background:${k.color}22;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+            <i data-feather="${k.icon}" style="width:18px;height:18px;stroke:${k.color}"></i>
+          </div>
+          <div>
+            <div style="font-size:20px;font-weight:800;color:${k.color};line-height:1">${k.val}</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:3px">${k.label}</div>
+          </div>
+        </div>`).join('')}
+    </div>`;
+
+  // ── FIFO Queue Table ────────────────────────────────────────
+  const fifoHtml = `
+    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:24px;overflow:hidden">
+      <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+        <div>
+          <div style="font-size:14px;font-weight:700;display:flex;align-items:center;gap:8px">
+            <i data-feather="list" style="width:15px;height:15px;stroke:var(--accent)"></i>
+            Antrian Produksi — FIFO
+          </div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:2px">
+            Order diurutkan dari yang paling lama masuk (First In = dikerjakan pertama)
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--text-muted);display:flex;align-items:center;gap:6px">
+          <div style="width:6px;height:6px;border-radius:50%;background:#34d399;animation:pulse-glow 2s infinite"></div>
+          Live — auto refresh 5 detik
+        </div>
+      </div>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+          <thead>
+            <tr style="background:var(--bg-base)">
+              <th style="padding:10px 16px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);white-space:nowrap">#</th>
+              <th style="padding:10px 16px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted)">No. Order</th>
+              <th style="padding:10px 16px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted)">Pesanan</th>
+              <th style="padding:10px 16px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted)">Pelanggan</th>
+              <th style="padding:10px 16px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted)">Status</th>
+              <th style="padding:10px 16px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted)">Prioritas</th>
+              <th style="padding:10px 16px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);white-space:nowrap">Umur Order</th>
+              <th style="padding:10px 16px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);white-space:nowrap">Jatuh Tempo</th>
+              <th style="padding:10px 16px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted)">FIFO</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${fifo_queue.length ? fifo_queue.map((o, idx) => {
+              const age    = fifoAgeLabel(o.age_minutes);
+              const isOver = o.due_status === 'overdue';
+              const isToday= o.due_status === 'today';
+              // FIFO violation: order dengan prioritas urgent tapi bukan yang paling awal masuk
+              const fifoOk = o.priority !== 'urgent' || idx === 0 || fifo_queue[idx-1]?.priority === 'urgent';
+              const rowBg  = idx % 2 === 0 ? '' : 'background:var(--bg-base)';
+              return `
+                <tr style="border-top:1px solid var(--border);cursor:pointer;${rowBg}"
+                    onclick="openOrderStatusModal(${o.id_orders})"
+                    onmouseover="this.style.background='var(--bg-card-hover)'"
+                    onmouseout="this.style.background='${idx%2===0?'':'var(--bg-base)'}'">
+                  <td style="padding:12px 16px">
+                    <div style="width:24px;height:24px;border-radius:50%;background:var(--bg-surface);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--text-muted)">${idx+1}</div>
+                  </td>
+                  <td style="padding:12px 16px;font-family:monospace;font-size:12px;color:var(--accent)">${o.order_number}</td>
+                  <td style="padding:12px 16px;font-weight:600;max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${o.title}</td>
+                  <td style="padding:12px 16px;color:var(--text-secondary)">${o.customer_name}</td>
+                  <td style="padding:12px 16px"><span class="badge badge-${o.status}">${statusLabel(o.status)}</span></td>
+                  <td style="padding:12px 16px"><span class="badge badge-${o.priority}">${priorityLabel(o.priority)}</span></td>
+                  <td style="padding:12px 16px">
+                    <div style="font-size:12px;font-weight:600;color:${o.age_minutes > 2880 ? '#f87171' : o.age_minutes > 1440 ? '#fbbf24' : 'var(--text-secondary)'}">${age}</div>
+                    <div style="font-size:10px;color:var(--text-muted)">${formatDateTimeShort(o.created_at)}</div>
+                  </td>
+                  <td style="padding:12px 16px">
+                    <span style="font-size:12px;font-weight:600;color:${isOver?'#f87171':isToday?'#fbbf24':'var(--text-secondary)'}">
+                      ${isOver?'<i class="bi bi-exclamation-circle-fill" style="margin-right:3px"></i>':''}${formatDate(o.due_date)}
+                    </span>
+                  </td>
+                  <td style="padding:12px 16px">
+                    ${fifoOk
+                      ? `<span style="font-size:11px;font-weight:700;color:#10b981;display:flex;align-items:center;gap:4px"><i data-feather="check" style="width:12px;height:12px"></i> OK</span>`
+                      : `<span style="font-size:11px;font-weight:700;color:#f59e0b;display:flex;align-items:center;gap:4px"><i data-feather="alert-triangle" style="width:12px;height:12px"></i> Diprioritaskan</span>`
+                    }
+                  </td>
+                </tr>`;
+            }).join('') : `
+              <tr>
+                <td colspan="9" style="padding:40px;text-align:center;color:var(--text-muted)">
+                  <i data-feather="inbox" style="width:32px;height:32px;margin-bottom:10px;display:block;margin-left:auto;margin-right:auto;opacity:0.4"></i>
+                  Tidak ada order aktif
+                </td>
+              </tr>`}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+
+  // ── Pipeline Kanban ─────────────────────────────────────────
+  const pipelineCols = {
+    pending:       { label:'Pending',      color:'#94a3b8', icon:'clock'        },
+    confirmed:     { label:'Dikonfirmasi', color:'#60a5fa', icon:'check-circle' },
+    in_progress:   { label:'Diproses',     color:'#fbbf24', icon:'zap'          },
+    quality_check: { label:'Quality Check',color:'#22d3ee', icon:'eye'          },
+  };
+
+  const pipelineHtml = `
+    <div style="margin-bottom:8px">
+      <div style="font-size:14px;font-weight:700;margin-bottom:4px;display:flex;align-items:center;gap:8px">
+        <i data-feather="columns" style="width:15px;height:15px;stroke:var(--accent)"></i>
+        Pipeline Produksi
+      </div>
+      <div style="font-size:11px;color:var(--text-muted)">Status setiap order beserta lama waktu di tahap tersebut</div>
+    </div>
+    <div class="kanban-board">
+      ${Object.entries(pipelineCols).map(([key, c]) => {
+        const cards = pipeline[key] || [];
+        return `
+          <div class="kanban-col" style="border-top:3px solid ${c.color}">
+            <div class="kanban-col-header">
+              <div style="display:flex;align-items:center;gap:7px">
+                <i data-feather="${c.icon}" style="width:13px;height:13px;stroke:${c.color}"></i>
+                <div class="kanban-col-title" style="color:${c.color}">${c.label}</div>
+              </div>
+              <div class="kanban-count">${cards.length}</div>
+            </div>
+            <div class="kanban-cards">
+              ${cards.length ? cards.map(o => {
+                const hrs      = parseInt(o.hours_in_status) || 0;
+                const hrsColor = hrs > 24 ? '#f87171' : hrs > 8 ? '#fbbf24' : '#94a3b8';
+                return `
+                  <div class="kanban-card" onclick="openOrderStatusModal(${o.id_orders})" title="Klik untuk update status">
+                    <div class="kanban-card-title">${o.title}</div>
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+                      <span class="badge badge-${o.priority}" style="font-size:10px">${priorityLabel(o.priority)}</span>
+                      <span style="font-size:10px;font-weight:700;color:${hrsColor}" title="Lama di status ini">
+                        <i data-feather="clock" style="width:9px;height:9px;margin-right:2px"></i>${hrs > 0 ? hrs+'j' : '<1j'}
+                      </span>
+                    </div>
+                    <div class="kanban-card-meta">
+                      <span class="kanban-card-customer">
+                        <i data-feather="user" style="width:10px;height:10px;margin-right:2px"></i>${o.customer_name}
+                      </span>
+                      <span class="kanban-card-due" style="color:${isDueSoon(o.due_date)?'var(--danger)':'var(--text-muted)'}">
+                        <i data-feather="calendar" style="width:10px;height:10px;margin-right:2px"></i>${formatDate(o.due_date)}
+                      </span>
+                    </div>
+                    <div style="font-size:10px;color:var(--text-muted);margin-top:6px;font-family:monospace">${o.order_number}</div>
+                  </div>`;
+              }).join('') : `
+                <div style="text-align:center;padding:28px 16px;color:var(--text-muted)">
+                  <i data-feather="inbox" style="width:22px;height:22px;margin-bottom:6px;display:block;margin-left:auto;margin-right:auto;opacity:0.35"></i>
+                  <div style="font-size:11px">Kosong</div>
+                </div>`}
+            </div>
+          </div>`;
+      }).join('')}
+    </div>`;
+
+  board.innerHTML = kpiHtml + fifoHtml + pipelineHtml;
   feather.replace();
 }
 
-function renderMachineGrid(machines, containerId) {
-  const el = document.getElementById(containerId);
-  if (!machines?.length) { el.innerHTML = '<div class="empty-state"><h3>Tidak ada data mesin</h3></div>'; return; }
-  el.innerHTML = machines.map(m => `
-    <div class="machine-card" data-status="${m.status}">
-      <div class="machine-header">
-        <div>
-          <div class="machine-name">${m.name}</div>
-          <div class="machine-type">${m.type || m.brand || '—'}</div>
-        </div>
-        <span class="badge badge-${m.status}">${statusLabel(m.status)}</span>
-      </div>
-      ${m.current_job ? `<div class="machine-job"><i class="bi bi-arrow-repeat"></i> <strong>${m.order_number}</strong><br><span>${m.current_job}</span></div>` : '<div class="machine-job" style="color:var(--text-muted)">Tidak ada pekerjaan aktif</div>'}
-      ${m.operator_name ? `<div style="font-size:11px;color:var(--text-muted);margin-top:6px"><i class="bi bi-person-fill"></i> ${m.operator_name}</div>` : ''}
-      <div style="display:flex;gap:8px;margin-top:14px">
-        <button class="btn btn-secondary btn-sm" onclick="changeMachineStatus(${m.id},'active')"><i class="bi bi-play-fill"></i> Aktif</button>
-        <button class="btn btn-warning btn-sm" onclick="changeMachineStatus(${m.id},'maintenance')"><i class="bi bi-tools"></i> Maintenance</button>
-        <button class="btn btn-secondary btn-sm" onclick="changeMachineStatus(${m.id},'idle')"><i class="bi bi-pause-fill"></i> Idle</button>
-      </div>
-    </div>
-  `).join('');
+// Dari MES Monitoring — klik order langsung buka di halaman Orders
+function openOrderStatusModal(orderId) {
+  navigate('orders');
+  // Highlight order setelah halaman load
+  setTimeout(() => {
+    const card = document.getElementById(`order-card-${orderId}`);
+    if (card) {
+      card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      card.style.transition = 'box-shadow .3s ease';
+      card.style.boxShadow  = '0 0 0 3px var(--primary)';
+      setTimeout(() => { card.style.boxShadow = ''; }, 2000);
+    }
+  }, 600);
 }
 
-function renderKanban(data) {
-  const board = document.getElementById('kanban-board');
-  const cols = {
-    pending: 'Pending', confirmed: 'Dikonfirmasi', in_progress: 'Proses',
-    quality_check: 'Quality Check', completed: 'Selesai'
-  };
-  const colColors = {
-    pending:'#94a3b8', confirmed:'#60a5fa', in_progress:'#fbbf24',
-    quality_check:'#22d3ee', completed:'#34d399'
-  };
-  board.innerHTML = Object.entries(cols).map(([key, label]) => {
-    const cards = data[key] || [];
-    return `
-      <div class="kanban-col">
-        <div class="kanban-col-header">
-          <div class="kanban-col-title" style="color:${colColors[key]}">${label}</div>
-          <div class="kanban-count">${cards.length}</div>
-        </div>
-        <div class="kanban-cards">
-          ${cards.length ? cards.map(o => `
-            <div class="kanban-card" onclick="openOrderStatusModal(${o.id})">
-              <div class="kanban-card-title">${o.title}</div>
-              <div style="margin-bottom:6px"><span class="badge badge-${o.priority}" style="font-size:10px">${priorityLabel(o.priority)}</span></div>
-              <div class="kanban-card-meta">
-                <span class="kanban-card-customer">${o.customer_name}</span>
-                <span class="kanban-card-due">${formatDate(o.due_date)}</span>
-              </div>
-            </div>
-          `).join('') : '<div style="color:var(--text-muted);font-size:12px;text-align:center;padding:16px">Kosong</div>'}
-        </div>
-      </div>
-    `;
-  }).join('');
+// Helper: format umur order jadi label manusiawi
+function fifoAgeLabel(minutes) {
+  if (minutes < 60)   return minutes + ' mnt';
+  if (minutes < 1440) return Math.floor(minutes / 60) + ' jam';
+  return Math.floor(minutes / 1440) + ' hari';
 }
 
-function switchMonitorTab(el, tab) {
-  document.querySelectorAll('.tabs .tab-pill').forEach(t => t.classList.remove('active'));
-  el.classList.add('active');
-  document.getElementById('monitor-tab-cards').style.display = tab === 'cards' ? 'block' : 'none';
-  document.getElementById('monitor-tab-kanban').style.display = tab === 'kanban' ? 'block' : 'none';
+// Helper: format lead time dari satuan jam ke label manusiawi
+function formatLeadTime(hours) {
+  const totalMinutes = Math.round(hours * 60);
+  if (totalMinutes < 1)   return '< 1 mnt';
+  if (totalMinutes < 60)  return totalMinutes + ' mnt';
+  const days  = Math.floor(totalMinutes / 1440);
+  const jam   = Math.floor((totalMinutes % 1440) / 60);
+  const menit = totalMinutes % 60;
+  if (days > 0) return days + ' hari' + (jam > 0 ? ' ' + jam + ' jam' : '');
+  return jam + ' jam' + (menit > 0 ? ' ' + menit + ' mnt' : '');
 }
 
-async function changeMachineStatus(id, status) {
-  const res = await apiPut(API + 'machines.php', { id, status, description: `Status diubah ke ${status}` });
-  if (res?.success) { showToast(`Status mesin diupdate ke ${statusLabel(status)}`, 'success'); loadMonitoring(); }
-  else showToast('Gagal update status mesin', 'error');
+// Helper: format datetime pendek
+function formatDateTimeShort(dt) {
+  if (!dt) return '—';
+  const d = new Date(dt);
+  return d.toLocaleDateString('id-ID', { day:'2-digit', month:'short' })
+       + ' ' + d.toLocaleTimeString('id-ID', { hour:'2-digit', minute:'2-digit' });
 }
 
 // ============================================================
@@ -601,8 +788,8 @@ function renderItemsTable(items) {
         <td>
           <div style="display:flex;gap:4px">
             <button class="btn btn-success btn-sm btn-icon" onclick="navigate('stock-mutation')" title="Stok Masuk"><i data-feather="arrow-down-circle"></i></button>
-            <button class="btn btn-secondary btn-sm btn-icon" title="Edit" onclick="openEditItemModal(${i.id})"><i data-feather="edit-2"></i></button>
-            <button class="btn btn-danger btn-sm btn-icon" title="Hapus" onclick="deleteItem(${i.id})"><i data-feather="trash-2"></i></button>
+            <button class="btn btn-secondary btn-sm btn-icon" title="Edit" onclick="openEditItemModal(${i.id_items})"><i data-feather="edit-2"></i></button>
+            <button class="btn btn-danger btn-sm btn-icon" title="Hapus" onclick="deleteItem(${i.id_items})"><i data-feather="trash-2"></i></button>
           </div>
         </td>
       </tr>
@@ -610,14 +797,41 @@ function renderItemsTable(items) {
   }).join('');
 }
 
+// ID item yang akan dihapus (disimpan saat modal konfirmasi dibuka)
+let pendingDeleteItemId = null;
+
 async function deleteItem(id) {
-  // Cek permission
   if (!checkPermission('delete')) return;
-  
-  if (!confirm('Hapus item ini?')) return;
-  const res = await apiFetch(`${API}items.php?id=${id}`, { method: 'DELETE' });
-  if (res?.berhasil) { showToast('Item berhasil dihapus', 'success'); loadItems(); }
-  else showToast('Gagal menghapus item', 'error');
+  // Cari nama item
+  const item = allItems.find(i => i.id_items == id);
+  const name = item ? item.name : 'item ini';
+  // Simpan id, tampilkan modal konfirmasi
+  pendingDeleteItemId = id;
+  document.getElementById('confirm-delete-name').textContent = name;
+  openModal('modal-confirm-delete');
+}
+
+async function confirmDeleteItem() {
+  if (!pendingDeleteItemId) return;
+  const btn = document.getElementById('confirm-delete-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<i data-feather="loader"></i> Menghapus...';
+  feather.replace();
+
+  const res = await apiFetch(`${API}items.php?id=${pendingDeleteItemId}`, { method: 'DELETE' });
+
+  btn.disabled = false;
+  btn.innerHTML = '<i data-feather="trash-2"></i> Hapus';
+  feather.replace();
+  pendingDeleteItemId = null;
+  closeModal('modal-confirm-delete');
+
+  if (res?.berhasil) {
+    showToast('Item berhasil dihapus', 'success');
+    loadItems();
+  } else {
+    showToast('Gagal menghapus item', 'error');
+  }
 }
 
 function openAddItemModal() { openModal('modal-add-item'); }
@@ -647,7 +861,6 @@ async function openEditItemModal(id) {
   document.getElementById('item-stock').disabled = true; // Stok tidak bisa diubah manual
   document.getElementById('item-min-stock').value = parseFloat(item.min_stock);
   document.getElementById('item-buy-price').value = parseFloat(item.purchase_price);
-  document.getElementById('item-sell-price').value = parseFloat(item.selling_price);
   document.getElementById('item-desc').value = item.description || '';
   
   openModal('modal-add-item');
@@ -674,7 +887,7 @@ async function submitAddItem(e) {
     min_stock: document.getElementById('item-min-stock').value,
     max_stock: 0,
     purchase_price: document.getElementById('item-buy-price').value,
-    selling_price: document.getElementById('item-sell-price').value,
+    selling_price: 0,
     description: document.getElementById('item-desc').value,
   };
   
@@ -762,7 +975,7 @@ async function loadMutations() {
   tbody.innerHTML = data.data.map(t => `
     <tr>
       <td style="font-size:12px">${formatDateTime(t.created_at)}</td>
-      <td>${allItems.find(i=>i.id==t.item_id)?.name || '—'}</td>
+      <td>${allItems.find(i=>i.id_items==t.item_id)?.name || '—'}</td>
       <td><span class="badge badge-${t.type==='in'?'completed':'cancelled'}">${t.type==='in'?'MASUK':'KELUAR'}</span></td>
       <td style="font-weight:700;color:${t.type==='in'?'var(--success)':'var(--danger)'}">${t.type==='in'?'+':'−'}${parseFloat(t.quantity)}</td>
       <td>${parseFloat(t.stock_before)}</td>
@@ -779,6 +992,7 @@ async function loadMutations() {
 let allProducts = [];
 
 async function loadProducts() {
+  // Load semua produk termasuk nonaktif agar bisa di-toggle
   const data = await apiFetch(API + 'products.php?action=all');
   allProducts = data?.data || [];
   renderProductsTable(allProducts);
@@ -802,14 +1016,14 @@ function renderProductsTable(products) {
     </div></td></tr>`;
     feather.replace(); return;
   }
-  tbody.innerHTML = products.map(p => `
-    <tr>
+  tbody.innerHTML = products.map(p => {
+    const isActive = p.is_active == '1' || p.is_active === 1;
+    return `
+    <tr style="${!isActive ? 'opacity:0.55' : ''}">
       <td style="font-family:monospace;font-size:12px;color:var(--accent)">${p.code}</td>
       <td style="font-weight:600">
         ${p.name}
-        ${!p.is_active || p.is_active == '0'
-          ? '<span class="badge badge-cancelled" style="margin-left:8px;font-size:10px">Nonaktif</span>'
-          : ''}
+        ${!isActive ? '<span class="badge badge-cancelled" style="margin-left:8px;font-size:10px">Nonaktif</span>' : ''}
       </td>
       <td style="color:var(--text-muted)">${p.category_name || '—'}</td>
       <td style="color:var(--text-muted)">${p.unit_symbol   || '—'}</td>
@@ -819,19 +1033,24 @@ function renderProductsTable(products) {
       </td>
       <td>
         <div style="display:flex;gap:4px">
-          <button class="btn btn-secondary btn-sm btn-icon" onclick="openEditProductModal(${p.id})" title="Edit">
+          <button class="btn btn-secondary btn-sm btn-icon" onclick="openEditProductModal(${p.id_products})" title="Edit">
             <i data-feather="edit-2"></i>
           </button>
-          <button class="btn btn-warning btn-sm btn-icon" onclick="openBOMModal(${p.id},'${p.name.replace(/'/g,"\\'")}')" title="Kelola Bahan Baku">
+          <button class="btn btn-warning btn-sm btn-icon" onclick="openBOMModal(${p.id_products},'${p.name.replace(/'/g,"\\'")}')" title="Kelola Bahan Baku">
             <i data-feather="layers"></i>
           </button>
-          <button class="btn btn-danger btn-sm btn-icon" onclick="deleteProduct(${p.id})" title="Nonaktifkan">
-            <i data-feather="trash-2"></i>
-          </button>
+          ${isActive
+            ? `<button class="btn btn-danger btn-sm btn-icon" onclick="deleteProduct(${p.id_products})" title="Nonaktifkan">
+                <i data-feather="eye-off"></i>
+               </button>`
+            : `<button class="btn btn-success btn-sm btn-icon" onclick="reactivateProduct(${p.id_products})" title="Aktifkan Kembali">
+                <i data-feather="eye"></i>
+               </button>`
+          }
         </div>
       </td>
-    </tr>
-  `).join('');
+    </tr>`;
+  }).join('');
   feather.replace();
 }
 
@@ -849,10 +1068,10 @@ function openAddProductModal() {
   // Isi dropdown kategori & unit
   const catSel = document.getElementById('product-category');
   catSel.innerHTML = '<option value="">-- Pilih Kategori --</option>';
-  refCategories.forEach(c => catSel.innerHTML += `<option value="${c.id}">${c.name}</option>`);
+  refCategories.forEach(c => catSel.innerHTML += `<option value="${c.id_categories}">${c.name}</option>`);
   const unitSel = document.getElementById('product-unit');
   unitSel.innerHTML = '<option value="">-- Pilih Satuan --</option>';
-  refUnits.forEach(u => unitSel.innerHTML += `<option value="${u.id}">${u.name} (${u.symbol})</option>`);
+  refUnits.forEach(u => unitSel.innerHTML += `<option value="${u.id_units}">${u.name} (${u.symbol})</option>`);
 
   openModal('modal-add-product');
   feather.replace();
@@ -865,7 +1084,7 @@ async function openEditProductModal(id) {
   if (!p) { showToast('Gagal memuat data produk', 'error'); return; }
 
   document.getElementById('modal-product-title').textContent = 'Edit Produk';
-  document.getElementById('product-id').value    = p.id;
+  document.getElementById('product-id').value    = p.id_products;
   document.getElementById('product-name').value  = p.name;
   document.getElementById('product-price').value = parseFloat(p.default_price);
   document.getElementById('product-desc').value  = p.description || '';
@@ -875,12 +1094,12 @@ async function openEditProductModal(id) {
   // Isi dropdown
   const catSel = document.getElementById('product-category');
   catSel.innerHTML = '<option value="">-- Pilih Kategori --</option>';
-  refCategories.forEach(c => catSel.innerHTML += `<option value="${c.id}">${c.name}</option>`);
+  refCategories.forEach(c => catSel.innerHTML += `<option value="${c.id_categories}">${c.name}</option>`);
   catSel.value = p.category_id || '';
 
   const unitSel = document.getElementById('product-unit');
   unitSel.innerHTML = '<option value="">-- Pilih Satuan --</option>';
-  refUnits.forEach(u => unitSel.innerHTML += `<option value="${u.id}">${u.name} (${u.symbol})</option>`);
+  refUnits.forEach(u => unitSel.innerHTML += `<option value="${u.id_units}">${u.name} (${u.symbol})</option>`);
   unitSel.value = p.unit_id || '';
 
   openModal('modal-add-product');
@@ -915,12 +1134,59 @@ async function submitProduct(e) {
   }
 }
 
+async function reactivateProduct(id) {
+  if (!checkPermission('edit')) return;
+  const product = allProducts.find(p => p.id_products == id);
+  if (!product) { showToast('Produk tidak ditemukan', 'error'); return; }
+
+  const res = await apiPut(`${API}products.php`, {
+    id:            product.id,
+    name:          product.name,
+    category_id:   product.category_id || null,
+    unit_id:       product.unit_id     || null,
+    default_price: product.default_price || 0,
+    description:   product.description  || '',
+    is_active:     1,
+  });
+
+  if (res?.success) {
+    showToast(`"${product.name}" berhasil diaktifkan kembali`, 'success');
+    loadProducts();
+  } else {
+    showToast(res?.message || 'Gagal mengaktifkan produk', 'error');
+  }
+}
+
 async function deleteProduct(id) {
   if (!checkPermission('delete')) return;
-  if (!confirm('Nonaktifkan produk ini?')) return;
-  const res = await apiFetch(`${API}products.php?id=${id}`, { method: 'DELETE' });
-  if (res?.success) { showToast('Produk dinonaktifkan', 'success'); loadProducts(); }
-  else showToast('Gagal', 'error');
+  const product = allProducts.find(p => p.id_products == id);
+  const name    = product ? product.name : 'produk ini';
+  pendingDeleteProductId = id;
+  document.getElementById('confirm-delete-product-name').textContent = name;
+  openModal('modal-confirm-delete-product');
+}
+
+async function confirmDeleteProduct() {
+  if (!pendingDeleteProductId) return;
+  const btn = document.getElementById('confirm-delete-product-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<i data-feather="loader"></i> Memproses...';
+  feather.replace();
+
+  const res = await apiFetch(`${API}products.php?id=${pendingDeleteProductId}`, { method: 'DELETE' });
+
+  btn.disabled = false;
+  btn.innerHTML = '<i data-feather="trash-2" style="width:14px;height:14px"></i> Nonaktifkan';
+  feather.replace();
+  pendingDeleteProductId = null;
+  closeModal('modal-confirm-delete-product');
+
+  if (res?.success) {
+    showToast('Produk berhasil dinonaktifkan', 'success');
+    loadProducts();
+  } else {
+    showToast('Gagal menonaktifkan produk', 'error');
+  }
 }
 
 // ============================================================
@@ -936,19 +1202,12 @@ async function loadOrderInputPage() {
     due.value = d.toISOString().slice(0, 10);
   }
 
-  // Load mesin & operator kalau belum ada
-  const machSel = document.getElementById('ni-machine');
-  if (machSel && machSel.options.length <= 1) {
-    const [machs, ops] = await Promise.all([
-      apiFetch('api/machines.php?action=list'),
-      apiFetch('api/dashboard.php?action=operators'),
-    ]);
-    (machs?.data || []).forEach(m => {
-      machSel.innerHTML += `<option value="${m.id}">${m.name}</option>`;
-    });
-    const opSel = document.getElementById('ni-operator');
+  // Load operator kalau belum ada
+  const opSel2 = document.getElementById('ni-operator');
+  if (opSel2 && opSel2.options.length <= 1) {
+    const ops = await apiFetch('api/dashboard.php?action=operators');
     (ops?.data || []).forEach(o => {
-      opSel.innerHTML += `<option value="${o.id}">${o.name}</option>`;
+      opSel2.innerHTML += `<option value="${o.id_users}">${o.name}</option>`;
     });
   }
 
@@ -973,7 +1232,7 @@ async function loadOrderInputPage() {
         og.label = cat;
         items.forEach(p => {
           const opt = document.createElement('option');
-          opt.value = p.id;
+          opt.value = p.id_products;
           opt.textContent = `${p.name} — ${formatCurrency(p.default_price)}${p.unit_symbol ? ' / ' + p.unit_symbol : ''}`;
           opt.dataset.price = p.default_price;
           opt.dataset.name  = p.name;
@@ -1007,7 +1266,7 @@ function niSearchCustomer(q) {
     const list = r?.data || [];
     if (!list.length) { dd.style.display = 'none'; return; }
     dd.innerHTML = list.map(c => `
-      <div onclick="niPilihPelanggan(${c.id},'${niEsc(c.name)}','${niEsc(c.phone)}','${niEsc(c.city||'')}','${niEsc(c.address||'')}')"
+      <div onclick="niPilihPelanggan(${c.id_customers},'${niEsc(c.name)}','${niEsc(c.phone)}','${niEsc(c.city||'')}','${niEsc(c.address||'')}')"
         style="padding:10px 14px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center"
         onmouseover="this.style.background='var(--bg-card-hover)'"
         onmouseout="this.style.background=''">
@@ -1049,7 +1308,7 @@ function niTambahItem() {
   if (!opt) return;
 
   // Cek kalau sudah ada, tambah qty saja
-  const exist = niItems.find(i => i.id == id);
+  const exist = niItems.find(i => i.id_products == id);
   if (exist) {
     exist.qty++;
     niRenderItems();
@@ -1199,7 +1458,6 @@ async function niSimpanOrder() {
     tax:              tax,
     grand_total_override: grand, // kirim grand total yang sudah dihitung
     items:            niItems,   // array semua item
-    machine_id:       document.getElementById('ni-machine').value  || null,
     operator_id:      document.getElementById('ni-operator').value || null,
     priority:         document.getElementById('ni-priority').value,
     due_date:         due,
@@ -1362,8 +1620,6 @@ function niResetForm() {  ['ni-cust-name','ni-cust-phone','ni-cust-city','ni-cus
   ['ni-discount','ni-tax'].forEach((id, i) => {
     const el = document.getElementById(id); if (el) el.value = [0, 11][i];
   });
-  const machSel = document.getElementById('ni-machine');
-  if (machSel) machSel.value = '';
   const opSel = document.getElementById('ni-operator');
   if (opSel) opSel.value = '';
   const prioSel = document.getElementById('ni-priority');
@@ -1499,7 +1755,7 @@ function renderOrderCard(o) {
     const cls       = isCancelled ? 'cancelled' : isDone ? 'done' : isActive ? 'active' : isNext ? 'next-btn' : '';
     const labelCls  = isDone ? 'done-label' : isActive ? 'active-label' : '';
     const title     = isNext ? `Klik → ${step.label}` : step.label;
-    const onclick   = isNext ? `onclick="updateOrderStatus(${o.id},'${step.key}',${o.machine_id||'null'})"` : '';
+    const onclick   = isNext ? `onclick="updateOrderStatus(${o.id_orders},'${step.key}')"` : '';
 
     if (idx > 0) {
       stepperHtml += `<div class="step-connector ${isDone ? 'done' : ''}"></div>`;
@@ -1517,7 +1773,7 @@ function renderOrderCard(o) {
   const canCancel = !['completed','cancelled'].includes(o.status);
   const cancelBtn = canCancel
     ? `<button class="btn btn-danger btn-sm" style="font-size:11px;padding:4px 10px"
-         onclick="updateOrderStatus(${o.id},'cancelled',${o.machine_id||'null'})">
+         onclick="updateOrderStatus(${o.id_orders},'cancelled')">
          <i data-feather="x"></i> Batalkan
        </button>`
     : '';
@@ -1525,20 +1781,19 @@ function renderOrderCard(o) {
   // Delivery badge if completed
   const deliveryBtn = o.status === 'completed'
     ? `<button class="btn btn-secondary btn-sm" style="font-size:11px;padding:4px 10px"
-         onclick="openNewDeliveryModal(${o.id})">
+         onclick="openNewDeliveryModal(${o.id_orders})">
          <i data-feather="truck"></i> Kirim
        </button>`
     : '';
 
   return `
-    <div class="order-card" id="order-card-${o.id}">
+    <div class="order-card" id="order-card-${o.id_orders}">
       <div class="order-card-header">
         <div class="order-card-left">
           <div class="order-card-num">${o.order_number}</div>
           <div class="order-card-title">${o.title}</div>
           <div class="order-card-meta">
             <span><i data-feather="user"></i>${o.customer_name}</span>
-            ${o.machine_name ? `<span><i data-feather="cpu"></i>${o.machine_name}</span>` : ''}
             ${o.operator_name ? `<span><i data-feather="tool"></i>${o.operator_name}</span>` : ''}
             <span><i data-feather="calendar"></i>${formatDate(o.due_date)}</span>
           </div>
@@ -1555,16 +1810,16 @@ function renderOrderCard(o) {
     </div>`;
 }
 
-async function updateOrderStatus(orderId, newStatus, machineId) {
+async function updateOrderStatus(orderId, newStatus) {
   if (!checkPermission('edit')) return;
   const label = statusLabel(newStatus);
   const res = await apiPut(`${API}orders.php`, {
     id: orderId, status: newStatus,
-    machine_id: machineId, status_only: true
+    status_only: true
   });
   if (res?.success) {
     showToast(`Status order → ${label}`, 'success');
-    const order = allOrders.find(o => o.id == orderId);
+    const order = allOrders.find(o => o.id_orders == orderId);
     if (order) {
       order.status = newStatus;
       const card = document.getElementById(`order-card-${orderId}`);
@@ -1585,7 +1840,7 @@ async function updateOrderStatus(orderId, newStatus, machineId) {
             setTimeout(() => {
               updatedCard.remove();
               // Hapus dari array aktif
-              allOrders = allOrders.filter(o => o.id != orderId);
+              allOrders = allOrders.filter(o => o.id_orders != orderId);
               // Update badge tab
               const badgeTab = document.getElementById('badge-orders-active');
               if (badgeTab) badgeTab.textContent = allOrders.length;
@@ -1756,7 +2011,7 @@ function renderDeliveryCard(d) {
     // "next" untuk arrived → received butuh foto, handle khusus
     const isToReceived = stepNext && step.key === 'received';
     const onclick = stepNext && !isToReceived
-      ? `onclick="updateDeliveryStatus(${d.id},'${step.key}')"`
+      ? `onclick="updateDeliveryStatus(${d.id_deliveries},'${step.key}')"`
       : '';
 
     if (idx > 0) {
@@ -1774,19 +2029,19 @@ function renderDeliveryCard(d) {
   // Zona upload foto jika status = arrived
   const showProofZone = d.status === 'arrived';
   const proofZone = showProofZone ? `
-    <div class="proof-upload-zone" id="proof-zone-${d.id}">
+    <div class="proof-upload-zone" id="proof-zone-${d.id_deliveries}">
       <label>
         <i data-feather="camera"></i> Pilih Foto Bukti
-        <input type="file" accept="image/*" id="proof-file-${d.id}"
-          onchange="previewProof(${d.id}, this)" />
+        <input type="file" accept="image/*" id="proof-file-${d.id_deliveries}"
+          onchange="previewProof(${d.id_deliveries}, this)" />
       </label>
-      <img class="proof-preview" id="proof-preview-${d.id}" />
+      <img class="proof-preview" id="proof-preview-${d.id_deliveries}" />
       <div class="proof-upload-note">
         JPG / PNG / WEBP, maks. 5MB<br>
       <div style="font-size:11px;color:var(--warning)"><i class="bi bi-exclamation-triangle-fill"></i> Foto wajib sebelum konfirmasi diterima</div>
       </div>
-      <button class="btn-confirm-received" id="btn-received-${d.id}"
-        onclick="submitReceived(${d.id})" disabled>
+      <button class="btn-confirm-received" id="btn-received-${d.id_deliveries}"
+        onclick="submitReceived(${d.id_deliveries})" disabled>
         <i data-feather="check-circle"></i> Konfirmasi Diterima
       </button>
     </div>` : '';
@@ -1801,7 +2056,7 @@ function renderDeliveryCard(d) {
     </div>` : '';
 
   return `
-    <div class="order-card" id="delivery-card-${d.id}">
+    <div class="order-card" id="delivery-card-${d.id_deliveries}">
       <div class="order-card-header">
         <div class="order-card-left">
           <div class="order-card-num">${d.order_number}</div>
@@ -1828,7 +2083,7 @@ async function updateDeliveryStatus(id, newStatus) {
   const res = await apiPut(`${API}deliveries.php`, { id, status: newStatus });
   if (res?.success) {
     showToast(`Pengiriman → ${deliveryStatusLabel(newStatus)}`, 'success');
-    const deliv = allDeliveries.find(d => d.id == id);
+    const deliv = allDeliveries.find(d => d.id_deliveries == id);
     if (deliv) {
       deliv.status = newStatus;
       const card = document.getElementById(`delivery-card-${id}`);
@@ -1842,7 +2097,7 @@ async function updateDeliveryStatus(id, newStatus) {
             updated.classList.add('order-card-fadeout');
             setTimeout(() => {
               updated.remove();
-              allDeliveries = allDeliveries.filter(d => d.id != id);
+              allDeliveries = allDeliveries.filter(d => d.id_deliveries != id);
               const badgeTab = document.getElementById('badge-deliveries-active');
               if (badgeTab) badgeTab.textContent = allDeliveries.length;
               const list = document.getElementById('deliveries-list');
@@ -1911,7 +2166,7 @@ async function submitReceived(id) {
     if (data.success) {
       showToast('Pengiriman dikonfirmasi diterima', 'success');
       // Update card dulu, lalu fade-out setelah 2 detik
-      const deliv = allDeliveries.find(d => d.id == id);
+      const deliv = allDeliveries.find(d => d.id_deliveries == id);
       if (deliv) {
         deliv.status   = 'received';
         deliv.proof_image = data.proof_image;
@@ -1925,7 +2180,7 @@ async function submitReceived(id) {
               updated.classList.add('order-card-fadeout');
               setTimeout(() => {
                 updated.remove();
-                allDeliveries = allDeliveries.filter(d => d.id != id);
+                allDeliveries = allDeliveries.filter(d => d.id_deliveries != id);
                 const badgeTab = document.getElementById('badge-deliveries-active');
                 if (badgeTab) badgeTab.textContent = allDeliveries.length;
                 const list = document.getElementById('deliveries-list');
@@ -1968,16 +2223,6 @@ function deliveryStatusLabel(s) {
 }
 
 // ============================================================
-// MACHINES (Page)
-// ============================================================
-async function loadMachinesPage() {
-  const data = await apiFetch(API + 'machines.php?action=list');
-  if (!data?.success) return;
-  renderMachineGrid(data.data, 'machines-page-grid');
-  feather.replace();
-}
-
-// ============================================================
 // CUSTOMERS
 // ============================================================
 let allCustomers = [];
@@ -2005,18 +2250,18 @@ function renderCustomersList(customers) {
     el.innerHTML = `<div class="card"><div class="empty-state">
       <i data-feather="users"></i>
       <h3>Belum ada pelanggan</h3>
-      <p>Pelanggan akan otomatis terdaftar saat order baru dibuat.</p>
-      <a href="index.php" onclick="navigate('order-input');return false;" class="btn btn-primary mt-4">
-        <i data-feather="plus-circle"></i> Input Order Baru
-      </a>
+      <p>Tambah pelanggan baru atau buat order untuk mendaftarkan pelanggan secara otomatis.</p>
+      <button onclick="openAddCustomerModal()" class="btn btn-primary mt-4">
+        <i data-feather="plus"></i> Tambah Pelanggan
+      </button>
     </div></div>`;
     feather.replace(); return;
   }
 
   el.innerHTML = customers.map(c => `
-    <div class="order-card" style="cursor:pointer" onclick="lihatHistory(${c.id})">
+    <div class="order-card">
       <div class="order-card-header">
-        <div class="order-card-left">
+        <div class="order-card-left" style="cursor:pointer" onclick="lihatHistory(${c.id_customers})">
           <div style="display:flex;align-items:center;gap:10px">
             <div style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--secondary));
                         display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:white;flex-shrink:0">
@@ -2032,14 +2277,117 @@ function renderCustomersList(customers) {
             </div>
           </div>
         </div>
-        <div class="order-card-right">
-          <span style="font-size:12px;color:var(--text-muted)">Lihat Riwayat</span>
-          <i data-feather="chevron-right" style="width:16px;height:16px;stroke:var(--text-muted)"></i>
+        <div class="order-card-right" style="display:flex;align-items:center;gap:8px">
+          <button class="btn btn-secondary btn-sm btn-icon" title="Edit" onclick="openEditCustomerModal(${c.id_customers})">
+            <i data-feather="edit-2"></i>
+          </button>
+          <button class="btn btn-danger btn-sm btn-icon" title="Hapus" onclick="deleteCustomer(${c.id_customers},'${c.name.replace(/'/g,"\\'") }')">
+            <i data-feather="trash-2"></i>
+          </button>
+          <button class="btn btn-secondary btn-sm" onclick="lihatHistory(${c.id_customers})" style="font-size:11px">
+            <i data-feather="clock"></i> Riwayat
+          </button>
         </div>
       </div>
     </div>
   `).join('');
   feather.replace();
+}
+
+// ── Tambah pelanggan ──
+function openAddCustomerModal() {
+  document.getElementById('modal-customer-title').textContent = 'Tambah Pelanggan';
+  document.getElementById('customer-id').value      = '';
+  document.getElementById('customer-name').value    = '';
+  document.getElementById('customer-phone').value   = '';
+  document.getElementById('customer-city').value    = '';
+  document.getElementById('customer-email').value   = '';
+  document.getElementById('customer-address').value = '';
+  document.getElementById('customer-notes').value   = '';
+  openModal('modal-add-customer');
+  feather.replace();
+}
+
+// ── Edit pelanggan ──
+async function openEditCustomerModal(id) {
+  const res = await apiFetch(`api/customers.php?action=get&id=${id}`);
+  if (!res?.berhasil) { showToast('Gagal memuat data pelanggan', 'error'); return; }
+  const c = res.data;
+  document.getElementById('modal-customer-title').textContent = 'Edit Pelanggan';
+  document.getElementById('customer-id').value      = c.id_customers;
+  document.getElementById('customer-name').value    = c.name || '';
+  document.getElementById('customer-phone').value   = c.phone || '';
+  document.getElementById('customer-city').value    = c.city || '';
+  document.getElementById('customer-email').value   = c.email || '';
+  document.getElementById('customer-address').value = c.address || '';
+  document.getElementById('customer-notes').value   = c.notes || '';
+  openModal('modal-add-customer');
+  feather.replace();
+}
+
+// ── Submit tambah / edit ──
+async function submitCustomer(e) {
+  e.preventDefault();
+  const id     = document.getElementById('customer-id').value;
+  const isEdit = id !== '';
+  const payload = {
+    id:              id || undefined,
+    name:            document.getElementById('customer-name').value.trim(),
+    phone:           document.getElementById('customer-phone').value.trim(),
+    city:            document.getElementById('customer-city').value.trim(),
+    email:           document.getElementById('customer-email').value.trim(),
+    address:         document.getElementById('customer-address').value.trim(),
+    notes:           document.getElementById('customer-notes').value.trim(),
+    contact_person:  '',
+    code:            isEdit ? undefined : 'CUS-AUTO',
+  };
+
+  if (!payload.name) { showToast('Nama pelanggan wajib diisi', 'warning'); return; }
+  if (!payload.phone) { showToast('No. HP wajib diisi', 'warning'); return; }
+
+  const res = isEdit
+    ? await apiPut('api/customers.php', payload)
+    : await apiPost('api/customers.php', payload);
+
+  if (res?.berhasil || res?.success) {
+    showToast(isEdit ? 'Pelanggan berhasil diupdate' : 'Pelanggan berhasil ditambahkan', 'success');
+    closeModal('modal-add-customer');
+    loadCustomers();
+  } else {
+    showToast(res?.message || res?.pesan || 'Gagal menyimpan pelanggan', 'error');
+  }
+}
+
+// ── Hapus pelanggan ──
+let _pendingDeleteCustomerId = null;
+function deleteCustomer(id, name) {
+  _pendingDeleteCustomerId = id;
+  document.getElementById('confirm-delete-customer-name').textContent = name;
+  openModal('modal-confirm-delete-customer');
+  feather.replace();
+}
+
+async function confirmDeleteCustomer() {
+  if (!_pendingDeleteCustomerId) return;
+  const btn = document.getElementById('confirm-delete-customer-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<i data-feather="loader"></i> Menghapus...';
+  feather.replace();
+
+  const res = await apiFetch(`api/customers.php?id=${_pendingDeleteCustomerId}`, { method: 'DELETE' });
+
+  btn.disabled = false;
+  btn.innerHTML = '<i data-feather="trash-2" style="width:14px;height:14px"></i> Hapus';
+  feather.replace();
+  closeModal('modal-confirm-delete-customer');
+  _pendingDeleteCustomerId = null;
+
+  if (res?.berhasil || res?.success) {
+    showToast('Pelanggan berhasil dihapus', 'success');
+    loadCustomers();
+  } else {
+    showToast(res?.message || 'Gagal menghapus pelanggan', 'error');
+  }
 }
 
 async function lihatHistory(id) {
@@ -2104,7 +2452,7 @@ function renderReportTable(rows, type) {
   const headers = {
     stock: ['Kode','Nama','Kategori','Stok','Min','Maks','Satuan','Nilai','Status'],
     transactions: ['Waktu','Kode','Nama Item','Tipe','Jumlah','Satuan','Sblm','Sesudah','Harga','Referensi'],
-    orders: ['No. Order','Judul','Status','Prioritas','Customer','Mesin','Qty','Total','Jatuh Tempo','Selesai'],
+    orders: ['No. Order','Judul','Status','Prioritas','Customer','Qty','Total','Jatuh Tempo','Selesai'],
   };
 
   const cols = headers[type] || [];
@@ -2143,7 +2491,6 @@ function renderReportTable(rows, type) {
         <td><span class="badge badge-${r.status}">${statusLabel(r.status)}</span></td>
         <td><span class="badge badge-${r.priority}">${priorityLabel(r.priority)}</span></td>
         <td>${r.customer}</td>
-        <td>${r.machine||'—'}</td>
         <td>${r.quantity}</td>
         <td style="color:var(--success);font-weight:600">${formatCurrency(r.grand_total)}</td>
         <td style="font-size:12px">${formatDate(r.due_date)}</td>
@@ -2157,21 +2504,108 @@ function renderReportTable(rows, type) {
 }
 
 let reportCache = [];
-function exportReport() {
-  // Simple CSV export
+function exportReport(format = 'csv') {
   const table = document.querySelector('#report-table-wrapper table');
   if (!table) { showToast('Tidak ada data untuk diekspor', 'warning'); return; }
-  let csv = '';
-  table.querySelectorAll('tr').forEach(row => {
-    const cells = [...row.querySelectorAll('th,td')].map(c => `"${c.innerText.replace(/"/g,'""')}"`);
-    csv += cells.join(',') + '\n';
-  });
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = `laporan_${currentReportType}_${new Date().toISOString().slice(0,10)}.csv`;
-  a.click(); URL.revokeObjectURL(url);
-  showToast('Laporan berhasil diekspor', 'success');
+
+  const reportLabels = { stock: 'Laporan Stok', transactions: 'Mutasi Stok', orders: 'Laporan Order' };
+  const title  = reportLabels[currentReportType] || 'Laporan';
+  const from   = document.getElementById('report-from').value;
+  const to     = document.getElementById('report-to').value;
+  const period = from && to ? `${formatDate(from)} — ${formatDate(to)}` : '';
+  const filename = `laporan_${currentReportType}_${new Date().toISOString().slice(0,10)}`;
+
+  if (format === 'csv') {
+    let csv = '';
+    table.querySelectorAll('tr').forEach(row => {
+      const cells = [...row.querySelectorAll('th,td')].map(c => `"${c.innerText.replace(/"/g,'""')}"`);
+      csv += cells.join(',') + '\n';
+    });
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = filename + '.csv';
+    a.click(); URL.revokeObjectURL(url);
+    showToast('Laporan CSV berhasil diekspor', 'success');
+    return;
+  }
+
+  if (format === 'pdf') {
+    if (!window.jspdf) { showToast('Library PDF belum siap, coba lagi', 'warning'); return; }
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+
+    // ── Header ──
+    doc.setFillColor(15, 15, 25);
+    doc.rect(0, 0, 297, 30, 'F');
+    doc.setTextColor(165, 180, 252);
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Ranum Indocraft', 14, 12);
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(200, 200, 220);
+    doc.text('Sistem Inventory & Monitoring Percetakan', 14, 19);
+
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(13);
+    doc.setFont('helvetica', 'bold');
+    doc.text(title, 297 - 14, 12, { align: 'right' });
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(180, 180, 200);
+    if (period) doc.text('Periode: ' + period, 297 - 14, 19, { align: 'right' });
+    doc.text('Dicetak: ' + new Date().toLocaleString('id-ID'), 297 - 14, 25, { align: 'right' });
+
+    // ── Ambil header & rows dari tabel ──
+    const headers = [...table.querySelectorAll('thead th')].map(th => th.innerText.trim());
+    const rows    = [...table.querySelectorAll('tbody tr')].map(tr =>
+      [...tr.querySelectorAll('td')].map(td => td.innerText.trim())
+    );
+
+    // ── autoTable ──
+    doc.autoTable({
+      startY: 34,
+      head: [headers],
+      body: rows,
+      styles: {
+        fontSize: 8,
+        cellPadding: 3,
+        overflow: 'linebreak',
+        textColor: [220, 220, 230],
+        fillColor: [22, 22, 35],
+        lineColor: [50, 50, 70],
+        lineWidth: 0.2,
+      },
+      headStyles: {
+        fillColor: [99, 102, 241],
+        textColor: [255, 255, 255],
+        fontStyle: 'bold',
+        fontSize: 8,
+      },
+      alternateRowStyles: {
+        fillColor: [28, 28, 45],
+      },
+      columnStyles: { 0: { fontStyle: 'bold' } },
+      margin: { left: 14, right: 14 },
+    });
+
+    // ── Footer ──
+    const pageCount = doc.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setTextColor(120, 120, 150);
+      doc.text(
+        `Halaman ${i} dari ${pageCount}   •   Ranum Indocraft © ${new Date().getFullYear()}`,
+        297 / 2, doc.internal.pageSize.height - 6,
+        { align: 'center' }
+      );
+    }
+
+    doc.save(filename + '.pdf');
+    showToast('Laporan PDF berhasil diekspor', 'success');
+  }
 }
 
 // ============================================================
@@ -2254,11 +2688,6 @@ function priorityLabel(p) {
   return map[p] || p;
 }
 
-function machineStatusColor(s) {
-  const map = { active:'#10b981', idle:'#94a3b8', maintenance:'#f59e0b', offline:'#ef4444' };
-  return map[s] || '#94a3b8';
-}
-
 // ============================================================
 // MANAGE USERS (Admin Only)
 // ============================================================
@@ -2298,7 +2727,7 @@ function renderUsersTable(users) {
 
   tbody.innerHTML = users.map(u => {
     const rc    = roleColors[u.role] || roleColors.operator;
-    const isSelf = u.id == selfId;
+    const isSelf = u.id_users == selfId;
     return `
       <tr>
         <td>
@@ -2325,19 +2754,17 @@ function renderUsersTable(users) {
           </span>
         </td>
         <td>
-          <span class="badge badge-${u.is_active == 1 ? 'active' : 'offline'}">
-            ${u.is_active == 1 ? 'Aktif' : 'Nonaktif'}
-          </span>
+          <span class="badge badge-completed">Aktif</span>
         </td>
         <td style="font-size:12px;color:var(--text-muted)">${u.last_login ? formatDateTime(u.last_login) : '—'}</td>
         <td style="font-size:12px;color:var(--text-muted)">${formatDate(u.created_at)}</td>
         <td>
           <div style="display:flex;gap:4px">
             <button class="btn btn-secondary btn-sm btn-icon" title="Edit"
-              onclick="openEditUserModal(${u.id})"><i data-feather="edit-2"></i></button>
-            ${!isSelf ? `<button class="btn btn-danger btn-sm btn-icon" title="${u.is_active == 1 ? 'Nonaktifkan' : 'Aktifkan'}"
-              onclick="toggleUserStatus(${u.id}, ${u.is_active})">
-              <i data-feather="${u.is_active == 1 ? 'user-x' : 'user-check'}"></i></button>` : ''}
+              onclick="openEditUserModal(${u.id_users})"><i data-feather="edit-2"></i></button>
+            ${!isSelf ? `<button class="btn btn-danger btn-sm btn-icon" title="Hapus User"
+              onclick="confirmDeleteUser(${u.id_users}, '${u.name.replace(/'/g, "\\'")}')">
+              <i data-feather="trash-2"></i></button>` : ''}
           </div>
         </td>
       </tr>`;
@@ -2366,7 +2793,7 @@ async function openEditUserModal(id) {
   const u = data.data;
 
   document.getElementById('modal-user-title').textContent  = 'Edit User';
-  document.getElementById('user-id').value                 = u.id;
+  document.getElementById('user-id').value                 = u.id_users;
   document.getElementById('user-name').value               = u.name;
   document.getElementById('user-email').value              = u.email;
   document.getElementById('user-email').disabled           = false;
@@ -2409,17 +2836,54 @@ async function submitAddUser(e) {
   }
 }
 
-async function toggleUserStatus(id, currentStatus) {
-  const newStatus = currentStatus == 1 ? 0 : 1;
-  const label     = newStatus === 0 ? 'menonaktifkan' : 'mengaktifkan';
-  if (!confirm(`Yakin ingin ${label} user ini?`)) return;
+let _pendingDeleteUserId = null;
 
-  const res = await apiPut('api/users.php', { id, is_active: newStatus });
+function confirmDeleteUser(id, name) {
+  _pendingDeleteUserId = id;
+  document.getElementById('modal-toggle-user-name').textContent    = name;
+  document.getElementById('modal-toggle-user-action').textContent  = 'dihapus permanen dari sistem';
+  document.getElementById('modal-toggle-user-title').textContent   = 'Hapus User?';
+  document.getElementById('confirm-toggle-user-label').textContent = 'Hapus';
+
+  const iconEl   = document.getElementById('modal-toggle-user-icon-i');
+  const btnEl    = document.getElementById('confirm-toggle-user-btn');
+  const iconWrap = document.getElementById('modal-toggle-user-icon');
+  iconEl.setAttribute('data-feather', 'trash-2');
+  btnEl.className          = 'btn btn-danger';
+  btnEl.style.minWidth     = '110px';
+  iconWrap.style.background = 'rgba(239,68,68,0.12)';
+  iconWrap.style.border     = '2px solid rgba(239,68,68,0.3)';
+
+  // Ganti teks keterangan
+  const infoEl = document.querySelector('#modal-confirm-toggle-user [style*="font-size:12px"]');
+  if (infoEl) infoEl.textContent = 'Tindakan ini tidak dapat dibatalkan.';
+
+  openModal('modal-confirm-toggle-user');
+  feather.replace();
+}
+
+async function confirmToggleUser() {
+  if (!_pendingDeleteUserId) return;
+
+  const btn = document.getElementById('confirm-toggle-user-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<i data-feather="loader"></i> Menghapus...';
+  feather.replace();
+
+  const res = await apiFetch(`api/users.php?id=${_pendingDeleteUserId}`, { method: 'DELETE' });
+
+  btn.disabled = false;
+  btn.innerHTML = '<i data-feather="trash-2"></i> Hapus';
+  feather.replace();
+
+  closeModal('modal-confirm-toggle-user');
+  _pendingDeleteUserId = null;
+
   if (res?.success || res?.berhasil) {
-    showToast(`User berhasil di${label === 'menonaktifkan' ? 'nonaktifkan' : 'aktifkan'}`, 'success');
+    showToast('User berhasil dihapus', 'success');
     loadUsers();
   } else {
-    showToast(res?.message || 'Gagal mengubah status user', 'error');
+    showToast(res?.message || 'Gagal menghapus user', 'error');
   }
 }
 
@@ -2480,7 +2944,7 @@ function renderBOMList() {
 
   // Build dropdown options
   const opts = bomItemsRef.map(i =>
-    `<option value="${i.id}" data-unit="${i.unit_symbol}">${i.code} — ${i.name} (${i.unit_symbol})</option>`
+    `<option value="${i.id_items}" data-unit="${i.unit_symbol}">${i.code} — ${i.name} (${i.unit_symbol})</option>`
   ).join('');
 
   el.innerHTML = `

@@ -36,9 +36,9 @@ switch ($method) {
                            c.name as customer_name, c.phone as customer_phone,
                            u.name as created_by_name
                     FROM deliveries d
-                    JOIN orders o ON d.order_id = o.id
-                    JOIN customers c ON o.customer_id = c.id
-                    LEFT JOIN users u ON d.created_by = u.id
+                    JOIN orders o ON d.order_id = o.id_orders
+                    JOIN customers c ON o.customer_id = c.id_customers
+                    LEFT JOIN users u ON d.created_by = u.id_users
                     WHERE 1=1";
             $params = [];
             // Support multi-status: statuses[] = ['prepared','shipping',...]
@@ -66,9 +66,9 @@ switch ($method) {
                 "SELECT d.*, o.order_number, o.title as order_title,
                         c.name as customer_name, c.phone as customer_phone
                  FROM deliveries d
-                 JOIN orders o ON d.order_id = o.id
-                 JOIN customers c ON o.customer_id = c.id
-                 WHERE d.id = ?"
+                 JOIN orders o ON d.order_id = o.id_orders
+                 JOIN customers c ON o.customer_id = c.id_customers
+                 WHERE d.id_deliveries = ?"
             );
             $stmt->execute([$id]);
             echo json_encode(['success' => true, 'data' => $stmt->fetch()]);
@@ -93,15 +93,15 @@ switch ($method) {
                         o.quantity, o.grand_total, o.start_date, o.due_date, o.completed_date,
                         o.notes as order_notes,
                         c.name as customer_name,
-                        d.id as delivery_id, d.status as delivery_status,
+                        d.id_deliveries as delivery_id, d.status as delivery_status,
                         d.destination_address, d.destination_city,
                         d.recipient_name, d.recipient_phone,
                         d.estimated_arrival, d.actual_arrival,
                         d.proof_image,
                         d.notes as delivery_notes, d.created_at as delivery_created
                  FROM orders o
-                 JOIN customers c ON o.customer_id = c.id
-                 LEFT JOIN deliveries d ON d.order_id = o.id
+                 JOIN customers c ON o.customer_id = c.id_customers
+                 LEFT JOIN deliveries d ON d.order_id = o.id_orders
                  WHERE o.order_number = ?"
             );
             $stmt->execute([$orderNum]);
@@ -125,7 +125,7 @@ switch ($method) {
                 exit;
             }
 
-            $stmt = $pdo->prepare("SELECT status, proof_image FROM deliveries WHERE id = ?");
+            $stmt = $pdo->prepare("SELECT status, proof_image FROM deliveries WHERE id_deliveries = ?");
             $stmt->execute([$id]);
             $current = $stmt->fetch();
 
@@ -178,7 +178,7 @@ switch ($method) {
                  SET status = 'received', proof_image = ?,
                      actual_arrival = CASE WHEN actual_arrival IS NULL THEN NOW() ELSE actual_arrival END,
                      updated_at = NOW()
-                 WHERE id = ?"
+                 WHERE id_deliveries = ?"
             );
             $stmt->execute([$filename, $id]);
             echo json_encode(['success' => true, 'message' => 'Pengiriman dikonfirmasi diterima', 'proof_image' => $filename]);
@@ -189,14 +189,14 @@ switch ($method) {
         $data    = json_decode(file_get_contents('php://input'), true) ?? [];
         $orderId = (int)($data['order_id'] ?? 0);
 
-        $stmt = $pdo->prepare("SELECT id FROM orders WHERE id = ?");
+        $stmt = $pdo->prepare("SELECT id_orders FROM orders WHERE id_orders = ?");
         $stmt->execute([$orderId]);
         if (!$stmt->fetch()) {
             echo json_encode(['success' => false, 'message' => 'Order tidak ditemukan']);
             exit;
         }
 
-        $stmt = $pdo->prepare("SELECT id FROM deliveries WHERE order_id = ?");
+        $stmt = $pdo->prepare("SELECT id_deliveries FROM deliveries WHERE order_id = ?");
         $stmt->execute([$orderId]);
         if ($stmt->fetch()) {
             echo json_encode(['success' => false, 'message' => 'Pengiriman untuk order ini sudah dibuat']);
@@ -237,7 +237,7 @@ switch ($method) {
             ? ", actual_arrival = CASE WHEN actual_arrival IS NULL THEN NOW() ELSE actual_arrival END"
             : "";
 
-        $stmt = $pdo->prepare("UPDATE deliveries SET status = ?, updated_at = NOW() $arrivalSql WHERE id = ?");
+        $stmt = $pdo->prepare("UPDATE deliveries SET status = ?, updated_at = NOW() $arrivalSql WHERE id_deliveries = ?");
         $stmt->execute([$newStatus, $id]);
         echo json_encode(['success' => true, 'message' => 'Status diupdate ke ' . $newStatus]);
         break;

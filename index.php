@@ -20,7 +20,7 @@ $userInfo = getUserInfo();
 ║                                                                          ║
 ║  Fitur Utama:                                                            ║
 ║  ✓ Dashboard dengan statistik & chart                                   ║
-║  ✓ Monitoring realtime status mesin                                      ║
+║  ✓ Tracking realtime progress order (kanban)                            ║
 ║  ✓ Manajemen bahan baku (CRUD)                                           ║
 ║  ✓ Mutasi stok (stok masuk/keluar)                                       ║
 ║  ✓ Manajemen order cetak                                                 ║
@@ -50,7 +50,7 @@ $userInfo = getUserInfo();
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>PrintTrack — Inventory & Monitoring Percetakan</title>
+  <title>Ranum Indocraft — Inventory & Monitoring Percetakan</title>
   <link rel="icon" type="image/png" href="logo.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
@@ -58,6 +58,8 @@ $userInfo = getUserInfo();
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
   <link rel="stylesheet" href="css/app.css?v=<?= time() ?>" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
   <style>
     /* Date picker icon white */
     input[type="date"] {
@@ -103,7 +105,7 @@ $userInfo = getUserInfo();
     <div class="sidebar-logo">
       <div class="logo-icon"><img src="logo.png" alt="Logo" style="width:44px;height:44px;object-fit:contain;border-radius:6px"></div>
       <div class="logo-text">
-        PrintTrack
+        Ranum Indocraft
         <span>Inventory & Monitoring</span>
       </div>
     </div>
@@ -115,7 +117,7 @@ $userInfo = getUserInfo();
           <i data-feather="grid"></i> Dashboard
         </div>
         <div class="nav-item" data-page="monitoring" onclick="navigate('monitoring')">
-          <i data-feather="activity"></i> Monitoring Realtime
+          <i data-feather="radio"></i> MES Monitoring
           <span class="nav-badge" id="badge-active">0</span>
         </div>
       </div>
@@ -142,9 +144,6 @@ $userInfo = getUserInfo();
         <div class="nav-item" data-page="deliveries" onclick="navigate('deliveries')">
           <i data-feather="truck"></i> Pengiriman
           <span class="nav-badge" id="badge-deliveries" style="display:none">0</span>
-        </div>
-        <div class="nav-item" data-page="machines" onclick="navigate('machines')">
-          <i data-feather="cpu"></i> Mesin
         </div>
         <div class="nav-item" data-page="customers" onclick="navigate('customers')">
           <i data-feather="users"></i> Pelanggan
@@ -271,29 +270,16 @@ $userInfo = getUserInfo();
           </div>
         </div>
 
-        <!-- Machine Status + Low Stock -->
-        <div class="grid-2 mb-6">
-          <div class="card">
-            <div class="card-header">
-              <div class="card-title">Status Mesin</div>
-              <button class="btn btn-secondary btn-sm" onclick="navigate('monitoring')">Lihat Semua</button>
-            </div>
-            <div id="dashboard-machines">
-              <div class="skeleton" style="height:80px;margin-bottom:8px"></div>
-              <div class="skeleton" style="height:80px;margin-bottom:8px"></div>
-              <div class="skeleton" style="height:80px"></div>
-            </div>
+        <!-- Stok Kritis -->
+        <div class="card mb-6">
+          <div class="card-header">
+            <div class="card-title"><i class="bi bi-exclamation-triangle-fill" style="color:var(--warning)"></i> Stok Kritis</div>
+            <button class="btn btn-secondary btn-sm" onclick="navigate('items')">Kelola Stok</button>
           </div>
-          <div class="card">
-            <div class="card-header">
-              <div class="card-title"><i class="bi bi-exclamation-triangle-fill" style="color:var(--warning)"></i> Stok Kritis</div>
-              <button class="btn btn-secondary btn-sm" onclick="navigate('items')">Kelola Stok</button>
-            </div>
-            <div id="dashboard-lowstock">
-              <div class="skeleton" style="height:60px;margin-bottom:8px"></div>
-              <div class="skeleton" style="height:60px;margin-bottom:8px"></div>
-              <div class="skeleton" style="height:60px"></div>
-            </div>
+          <div id="dashboard-lowstock">
+            <div class="skeleton" style="height:60px;margin-bottom:8px"></div>
+            <div class="skeleton" style="height:60px;margin-bottom:8px"></div>
+            <div class="skeleton" style="height:60px"></div>
           </div>
         </div>
 
@@ -324,27 +310,22 @@ $userInfo = getUserInfo();
         </div>
       </div>
 
-      <!-- ========== MONITORING PAGE ========== -->
+      <!-- ========== TRACKING REALTIME / MES MONITORING PAGE ========== -->
       <div class="page" id="page-monitoring">
-        <div class="flex items-center justify-between mb-6">
-          <div>
-            <div style="font-size:13px;color:var(--text-muted)">Update otomatis setiap 15 detik</div>
+        <div id="kanban-board">
+          <!-- Skeleton loading awal -->
+          <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:24px">
+            <div class="skeleton" style="flex:1;min-width:120px;height:80px;border-radius:10px"></div>
+            <div class="skeleton" style="flex:1;min-width:120px;height:80px;border-radius:10px"></div>
+            <div class="skeleton" style="flex:1;min-width:120px;height:80px;border-radius:10px"></div>
+            <div class="skeleton" style="flex:1;min-width:120px;height:80px;border-radius:10px"></div>
           </div>
-          <div class="tabs">
-            <div class="tab-pill active" onclick="switchMonitorTab(this,'cards')">Kartu Mesin</div>
-            <div class="tab-pill" onclick="switchMonitorTab(this,'kanban')">Kanban Order</div>
-          </div>
-        </div>
-
-        <div id="monitor-tab-cards">
-          <div class="machine-grid" id="machine-grid">
-            <!-- Loaded dynamically -->
-          </div>
-        </div>
-
-        <div id="monitor-tab-kanban" style="display:none">
-          <div class="kanban-board" id="kanban-board">
-            <!-- Loaded dynamically -->
+          <div class="skeleton" style="height:220px;border-radius:var(--radius);margin-bottom:24px"></div>
+          <div style="display:flex;gap:16px">
+            <div class="skeleton" style="flex:0 0 230px;height:280px;border-radius:var(--radius)"></div>
+            <div class="skeleton" style="flex:0 0 230px;height:280px;border-radius:var(--radius)"></div>
+            <div class="skeleton" style="flex:0 0 230px;height:280px;border-radius:var(--radius)"></div>
+            <div class="skeleton" style="flex:0 0 230px;height:280px;border-radius:var(--radius)"></div>
           </div>
         </div>
       </div>
@@ -603,21 +584,7 @@ $userInfo = getUserInfo();
             <!-- Produksi -->
             <div class="card" style="margin-bottom:20px">
               <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
-                <i data-feather="cpu"></i> Produksi
-              </div>
-              <div class="form-row">
-                <div class="form-group">
-                  <label class="form-label">Mesin</label>
-                  <select class="form-control" id="ni-machine">
-                    <option value="">-- Pilih Mesin --</option>
-                  </select>
-                </div>
-                <div class="form-group">
-                  <label class="form-label">Operator</label>
-                  <select class="form-control" id="ni-operator">
-                    <option value="">-- Pilih Operator --</option>
-                  </select>
-                </div>
+                <i data-feather="settings"></i> Produksi
               </div>
               <div class="form-row">
                 <div class="form-group">
@@ -633,6 +600,12 @@ $userInfo = getUserInfo();
                   <label class="form-label">Jatuh Tempo *</label>
                   <input type="date" class="form-control" id="ni-due" />
                 </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Operator</label>
+                <select class="form-control" id="ni-operator">
+                  <option value="">-- Pilih Operator --</option>
+                </select>
               </div>
               <div class="form-group">
                 <label class="form-label">Catatan</label>
@@ -662,7 +635,7 @@ $userInfo = getUserInfo();
             <div id="ni-nota-content" style="display:none;position:sticky;top:90px">
               <div class="card" id="ni-nota-print" style="padding:24px;font-size:13px">
                 <div style="text-align:center;border-bottom:2px solid var(--border);padding-bottom:14px;margin-bottom:14px">
-                <div style="font-size:18px;font-weight:800;color:var(--primary)"><i class="bi bi-printer-fill"></i> PrintTrack</div>
+                <div style="font-size:18px;font-weight:800;color:var(--primary)"><i class="bi bi-printer-fill"></i> Ranum Indocraft</div>
                   <div style="font-size:11px;color:var(--text-muted)">Sistem Inventory & Monitoring Percetakan</div>
                 </div>
                 <div style="text-align:center;margin-bottom:16px">
@@ -781,11 +754,6 @@ $userInfo = getUserInfo();
         </div>
       </div>
 
-      <!-- ========== MACHINES PAGE ========== -->
-      <div class="page" id="page-machines">
-        <div class="machine-grid" id="machines-page-grid"></div>
-      </div>
-
       <!-- ========== CUSTOMERS PAGE ========== -->
       <div class="page" id="page-customers">
         <div class="filter-bar">
@@ -793,6 +761,9 @@ $userInfo = getUserInfo();
             <i data-feather="search"></i>
             <input type="text" id="customers-search" placeholder="Cari pelanggan..." oninput="filterCustomers()" />
           </div>
+          <button class="btn btn-primary btn-sm" onclick="openAddCustomerModal()">
+            <i data-feather="plus"></i> Tambah Pelanggan
+          </button>
         </div>
         <div id="customers-list">
           <div class="skeleton" style="height:80px;margin-bottom:10px;border-radius:12px"></div>
@@ -925,8 +896,11 @@ $userInfo = getUserInfo();
           <button class="btn btn-primary btn-sm" onclick="loadReport()">
             <i data-feather="filter"></i> Tampilkan
           </button>
-          <button class="btn btn-secondary btn-sm" onclick="exportReport()">
+          <button class="btn btn-secondary btn-sm" onclick="exportReport('csv')">
             <i data-feather="download"></i> Export CSV
+          </button>
+          <button class="btn btn-danger btn-sm" onclick="exportReport('pdf')">
+            <i data-feather="file-text"></i> Export PDF
           </button>
         </div>
 
@@ -1229,6 +1203,145 @@ $userInfo = getUserInfo();
         <button type="submit" class="btn btn-primary"><i data-feather="save"></i> Simpan</button>
       </div>
     </form>
+  </div>
+</div>
+
+<!-- Modal Konfirmasi Hapus -->
+<div class="modal-overlay" id="modal-confirm-delete">
+  <div class="modal" style="max-width:380px;text-align:center;background:#ffffff;border:none;box-shadow:0 20px 60px rgba(0,0,0,0.3)">
+    <div style="width:64px;height:64px;border-radius:50%;background:#fff1f2;border:2px solid #fecdd3;display:flex;align-items:center;justify-content:center;margin:0 auto 20px">
+      <i data-feather="trash-2" style="width:28px;height:28px;stroke:#ef4444"></i>
+    </div>
+    <div style="font-size:18px;font-weight:700;color:#111827;margin-bottom:8px">Hapus Item?</div>
+    <div style="font-size:13px;color:#6b7280;margin-bottom:6px">Item <strong id="confirm-delete-name" style="color:#111827"></strong> akan dihapus.</div>
+    <div style="font-size:12px;color:#9ca3af;margin-bottom:28px">Tindakan ini tidak dapat dibatalkan.</div>
+    <div style="display:flex;gap:10px;justify-content:center">
+      <button onclick="closeModal('modal-confirm-delete')"
+        style="min-width:110px;padding:10px 20px;border-radius:8px;border:1px solid #e5e7eb;background:#f9fafb;color:#374151;font-size:14px;font-weight:600;cursor:pointer;transition:all .2s"
+        onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background='#f9fafb'">
+        Batal
+      </button>
+      <button id="confirm-delete-btn" onclick="confirmDeleteItem()"
+        style="min-width:110px;padding:10px 20px;border-radius:8px;border:none;background:#ef4444;color:#fff;font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;justify-content:center;transition:all .2s;box-shadow:0 4px 12px rgba(239,68,68,0.3)"
+        onmouseover="this.style.background='#dc2626'" onmouseout="this.style.background='#ef4444'">
+        <i data-feather="trash-2" style="width:14px;height:14px"></i> Hapus
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Konfirmasi Hapus Produk -->
+<div class="modal-overlay" id="modal-confirm-delete-product">
+  <div class="modal" style="max-width:380px;text-align:center;background:#ffffff;border:none;box-shadow:0 20px 60px rgba(0,0,0,0.3)">
+    <div style="width:64px;height:64px;border-radius:50%;background:#fff7ed;border:2px solid #fed7aa;display:flex;align-items:center;justify-content:center;margin:0 auto 20px">
+      <i data-feather="eye-off" style="width:28px;height:28px;stroke:#f97316"></i>
+    </div>
+    <div style="font-size:18px;font-weight:700;color:#111827;margin-bottom:8px">Nonaktifkan Produk?</div>
+    <div style="font-size:13px;color:#6b7280;margin-bottom:6px">Produk <strong id="confirm-delete-product-name" style="color:#111827"></strong> akan disembunyikan dari daftar.</div>
+    <div style="font-size:12px;color:#9ca3af;margin-bottom:28px">Bisa diaktifkan kembali kapan saja.</div>
+    <div style="display:flex;gap:10px;justify-content:center">
+      <button onclick="closeModal('modal-confirm-delete-product')"
+        style="min-width:110px;padding:10px 20px;border-radius:8px;border:1px solid #e5e7eb;background:#f9fafb;color:#374151;font-size:14px;font-weight:600;cursor:pointer;transition:all .2s"
+        onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background='#f9fafb'">
+        Batal
+      </button>
+      <button id="confirm-delete-product-btn" onclick="confirmDeleteProduct()"
+        style="min-width:110px;padding:10px 20px;border-radius:8px;border:none;background:#f97316;color:#fff;font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;justify-content:center;transition:all .2s;box-shadow:0 4px 12px rgba(249,115,22,0.3)"
+        onmouseover="this.style.background='#ea6c0a'" onmouseout="this.style.background='#f97316'">
+        <i data-feather="eye-off" style="width:14px;height:14px"></i> Nonaktifkan
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Tambah/Edit Pelanggan -->
+<div class="modal-overlay" id="modal-add-customer">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-customer-title">Tambah Pelanggan</div>
+      <button class="modal-close" onclick="closeModal('modal-add-customer')"><i data-feather="x"></i></button>
+    </div>
+    <form onsubmit="submitCustomer(event)">
+      <input type="hidden" id="customer-id" value="">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Nama *</label>
+          <input class="form-control" id="customer-name" placeholder="Nama pelanggan / perusahaan" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label">No. HP *</label>
+          <input class="form-control" id="customer-phone" placeholder="0812-3456-7890" required />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Kota</label>
+          <input class="form-control" id="customer-city" placeholder="Jakarta" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Email</label>
+          <input class="form-control" id="customer-email" type="email" placeholder="email@contoh.com" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Alamat</label>
+        <input class="form-control" id="customer-address" placeholder="Jl. Merdeka No. 1..." />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Catatan</label>
+        <textarea class="form-control" id="customer-notes" rows="2" placeholder="Catatan tambahan..."></textarea>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('modal-add-customer')">Batal</button>
+        <button type="submit" class="btn btn-primary"><i data-feather="save"></i> Simpan</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal Konfirmasi Hapus Pelanggan -->
+<div class="modal-overlay" id="modal-confirm-delete-customer">
+  <div class="modal" style="max-width:380px;text-align:center">
+    <div style="width:64px;height:64px;border-radius:50%;background:rgba(239,68,68,0.12);border:2px solid rgba(239,68,68,0.3);display:flex;align-items:center;justify-content:center;margin:0 auto 20px">
+      <i data-feather="user-x" style="width:28px;height:28px;stroke:#ef4444"></i>
+    </div>
+    <div style="font-size:18px;font-weight:700;margin-bottom:8px">Hapus Pelanggan?</div>
+    <div style="font-size:13px;color:var(--text-muted);margin-bottom:6px">
+      Pelanggan <strong id="confirm-delete-customer-name" style="color:var(--text-primary)"></strong> akan dihapus.
+    </div>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:28px">Tindakan ini tidak dapat dibatalkan.</div>
+    <div style="display:flex;gap:10px;justify-content:center">
+      <button onclick="closeModal('modal-confirm-delete-customer')" class="btn btn-secondary" style="min-width:110px">Batal</button>
+      <button id="confirm-delete-customer-btn" onclick="confirmDeleteCustomer()" class="btn btn-danger" style="min-width:110px">
+        <i data-feather="trash-2" style="width:14px;height:14px"></i> Hapus
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Konfirmasi Hapus User -->
+<div class="modal-overlay" id="modal-confirm-toggle-user">
+  <div class="modal" style="max-width:380px;text-align:center">
+    <div id="modal-toggle-user-icon" style="width:64px;height:64px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 20px">
+      <i id="modal-toggle-user-icon-i" data-feather="user-x" style="width:28px;height:28px"></i>
+    </div>
+    <div id="modal-toggle-user-title" style="font-size:18px;font-weight:700;margin-bottom:8px">Nonaktifkan User?</div>
+    <div style="font-size:13px;color:var(--text-muted);margin-bottom:6px">
+      User <strong id="modal-toggle-user-name" style="color:var(--text-primary)"></strong>
+      akan <span id="modal-toggle-user-action">dinonaktifkan</span>.
+    </div>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:28px">Tindakan ini tidak dapat dibatalkan.</div>
+    <div style="display:flex;gap:10px;justify-content:center">
+      <button onclick="closeModal('modal-confirm-toggle-user')"
+        class="btn btn-secondary" style="min-width:110px">
+        Batal
+      </button>
+      <button id="confirm-toggle-user-btn" onclick="confirmToggleUser()"
+        class="btn btn-danger" style="min-width:110px">
+        <i data-feather="user-x" style="width:14px;height:14px"></i>
+        <span id="confirm-toggle-user-label">Nonaktifkan</span>
+      </button>
+    </div>
   </div>
 </div>
 

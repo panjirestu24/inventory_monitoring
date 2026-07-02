@@ -214,6 +214,11 @@ body {
 @keyframes pulse-ring {
   0% { box-shadow: 0 0 0 0 rgba(16,185,129,0.7); }
   70% { box-shadow: 0 0 0 6px rgba(16,185,129,0); }
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.8); }
+}
   100% { box-shadow: 0 0 0 0 rgba(16,185,129,0); }
 }
 
@@ -485,64 +490,25 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 .progress-fill.warning { background: linear-gradient(90deg, var(--warning), #f97316); }
 .progress-fill.success { background: linear-gradient(90deg, var(--success), var(--accent)); }
 
-/* ---- Machine Cards ---- */
-.machine-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
-
-.machine-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 20px;
-  transition: var(--transition);
-  position: relative;
-  overflow: hidden;
-}
-
-.machine-card::after {
-  content: '';
-  position: absolute; top: 0; right: 0;
-  width: 80px; height: 80px;
-  border-radius: 50%;
-  background: var(--machine-glow, rgba(99,102,241,0.05));
-  transform: translate(30px, -30px);
-  pointer-events: none;
-}
-
-.machine-card[data-status="active"] {
-  border-color: rgba(16,185,129,0.3);
-  --machine-glow: rgba(16,185,129,0.1);
-}
-.machine-card[data-status="maintenance"] {
-  border-color: rgba(245,158,11,0.3);
-  --machine-glow: rgba(245,158,11,0.1);
-}
-.machine-card[data-status="offline"] {
-  border-color: rgba(239,68,68,0.3);
-  --machine-glow: rgba(239,68,68,0.1);
-}
-
-.machine-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 14px; }
-.machine-name { font-size: 15px; font-weight: 700; }
-.machine-type { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
-.machine-job { font-size: 12px; color: var(--text-secondary); margin: 8px 0 0; }
-.machine-job strong { color: var(--accent); }
-
-/* ---- Kanban Board ---- */
+/* ---- Kanban Board (Tracking Realtime) ---- */
 .kanban-board {
   display: flex; gap: 16px;
   overflow-x: auto;
-  padding-bottom: 8px;
+  padding-bottom: 16px;
 }
 .kanban-col {
-  min-width: 220px; flex: 0 0 220px;
+  min-width: 230px; flex: 0 0 230px;
   background: var(--bg-surface);
   border: 1px solid var(--border);
+  border-top-width: 3px;
   border-radius: var(--radius);
   padding: 16px;
+  max-height: calc(100vh - 280px);
+  overflow-y: auto;
 }
 .kanban-col-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
-.kanban-col-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
-.kanban-count { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 1px 8px; font-size: 11px; color: var(--text-muted); }
+.kanban-col-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; }
+.kanban-count { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 1px 8px; font-size: 11px; color: var(--text-muted); font-weight: 600; }
 .kanban-cards { display: flex; flex-direction: column; gap: 10px; }
 .kanban-card {
   background: var(--bg-card);
@@ -552,9 +518,9 @@ textarea.form-control { resize: vertical; min-height: 80px; }
   cursor: pointer;
   transition: var(--transition);
 }
-.kanban-card:hover { border-color: var(--primary); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
-.kanban-card-title { font-size: 13px; font-weight: 600; margin-bottom: 8px; color: var(--text-primary); }
-.kanban-card-meta { display: flex; align-items: center; justify-content: space-between; }
+.kanban-card:hover { border-color: var(--primary); transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0,0,0,0.3); }
+.kanban-card-title { font-size: 13px; font-weight: 600; margin-bottom: 8px; color: var(--text-primary); line-height: 1.4; }
+.kanban-card-meta { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px; }
 .kanban-card-customer { font-size: 11px; color: var(--text-muted); }
 .kanban-card-due { font-size: 11px; color: var(--text-secondary); }
 

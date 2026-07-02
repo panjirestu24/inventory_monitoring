@@ -1,2 +1,7 @@
 {
+  "javascript.validate.enable": false,
+  "js/ts.implicitProjectConfig.checkJs": false,
+  "[javascript]": {
+    "editor.defaultFormatter": "vscode.typescript-language-features"
+  }
 }
