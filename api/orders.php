@@ -141,9 +141,7 @@ switch ($method) {
 
                 if ($existing) {
                     $customerId = $existing['id_customers'];
-                    // Update nama jika berbeda
-                    $pdo->prepare("UPDATE customers SET name=?, city=?, updated_at=NOW() WHERE id_customers=?")
-                        ->execute([$data['customer_name'], $data['customer_city'] ?? '', $customerId]);
+                    // Jangan timpa data pelanggan lama — hanya pakai id-nya
                 } else {
                     // Auto-generate kode pelanggan
                     $countStmt = $pdo->query("SELECT COUNT(*)+1 FROM customers");

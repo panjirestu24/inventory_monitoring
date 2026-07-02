@@ -41,6 +41,28 @@ switch ($method) {
             );
             $stmt->execute([$q, $q]);
             echo json_encode(['success' => true, 'data' => $stmt->fetchAll()]);
+
+        } elseif ($action === 'check_phone') {
+            // Cek exact match nomor HP — hanya angka dibandingkan
+            $raw   = $_GET['phone'] ?? '';
+            $phone = preg_replace('/[^0-9]/', '', $raw);
+            if (strlen($phone) < 8) {
+                echo json_encode(['success' => true, 'found' => false]);
+                exit;
+            }
+            $stmt = $pdo->prepare(
+                "SELECT id_customers, name, phone, city
+                 FROM customers
+                 WHERE REGEXP_REPLACE(phone, '[^0-9]', '') = ? AND is_active = 1
+                 LIMIT 1"
+            );
+            $stmt->execute([$phone]);
+            $customer = $stmt->fetch();
+            echo json_encode([
+                'success' => true,
+                'found'   => (bool)$customer,
+                'data'    => $customer ?: null,
+            ]);
         } elseif ($action === 'history') {
             // Riwayat order per pelanggan
             $id = (int)($_GET['id'] ?? 0);

@@ -178,9 +178,9 @@ $userInfo = getUserInfo();
           <div class="user-role"><?= ucfirst($_SESSION['user_role']) ?></div>
         </div>
       </div>
-      <a href="logout.php" class="btn btn-secondary btn-sm" style="margin-top:12px;width:100%;text-align:center;text-decoration:none">
+      <button onclick="openModal('modal-confirm-logout');feather.replace()" class="btn btn-secondary btn-sm" style="margin-top:12px;width:100%;text-align:center">
         <i data-feather="log-out"></i> Logout
-      </a>
+      </button>
     </div>
   </aside>
 
@@ -486,7 +486,14 @@ $userInfo = getUserInfo();
                 </div>
                 <div class="form-group">
                   <label class="form-label">No. HP *</label>
-                  <input class="form-control" id="ni-cust-phone" placeholder="0812-3456-7890" />
+                  <input class="form-control" id="ni-cust-phone" placeholder="0812-3456-7890"
+                    oninput="niCekDuplikatHP(this.value)" />
+                  <div id="ni-phone-warning" style="display:none;margin-top:6px;padding:8px 12px;
+                    background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.3);
+                    border-radius:8px;font-size:12px;color:#fbbf24;align-items:center;gap:8px">
+                    <i class="bi bi-exclamation-triangle-fill"></i>
+                    <span id="ni-phone-warning-text"></span>
+                  </div>
                 </div>
               </div>
               <div class="form-row">
@@ -1206,48 +1213,36 @@ $userInfo = getUserInfo();
   </div>
 </div>
 
-<!-- Modal Konfirmasi Hapus -->
+<!-- Modal Konfirmasi Hapus Item -->
 <div class="modal-overlay" id="modal-confirm-delete">
-  <div class="modal" style="max-width:380px;text-align:center;background:#ffffff;border:none;box-shadow:0 20px 60px rgba(0,0,0,0.3)">
-    <div style="width:64px;height:64px;border-radius:50%;background:#fff1f2;border:2px solid #fecdd3;display:flex;align-items:center;justify-content:center;margin:0 auto 20px">
+  <div class="modal" style="max-width:360px;text-align:center">
+    <div style="width:64px;height:64px;border-radius:50%;background:rgba(239,68,68,0.12);border:2px solid rgba(239,68,68,0.3);display:flex;align-items:center;justify-content:center;margin:0 auto 20px">
       <i data-feather="trash-2" style="width:28px;height:28px;stroke:#ef4444"></i>
     </div>
-    <div style="font-size:18px;font-weight:700;color:#111827;margin-bottom:8px">Hapus Item?</div>
-    <div style="font-size:13px;color:#6b7280;margin-bottom:6px">Item <strong id="confirm-delete-name" style="color:#111827"></strong> akan dihapus.</div>
-    <div style="font-size:12px;color:#9ca3af;margin-bottom:28px">Tindakan ini tidak dapat dibatalkan.</div>
+    <div style="font-size:18px;font-weight:700;margin-bottom:8px">Hapus Item?</div>
+    <div style="font-size:13px;color:var(--text-muted);margin-bottom:6px">Item <strong id="confirm-delete-name" style="color:var(--text-primary)"></strong> akan dihapus permanen.</div>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:28px">Tindakan ini tidak dapat dibatalkan.</div>
     <div style="display:flex;gap:10px;justify-content:center">
-      <button onclick="closeModal('modal-confirm-delete')"
-        style="min-width:110px;padding:10px 20px;border-radius:8px;border:1px solid #e5e7eb;background:#f9fafb;color:#374151;font-size:14px;font-weight:600;cursor:pointer;transition:all .2s"
-        onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background='#f9fafb'">
-        Batal
-      </button>
-      <button id="confirm-delete-btn" onclick="confirmDeleteItem()"
-        style="min-width:110px;padding:10px 20px;border-radius:8px;border:none;background:#ef4444;color:#fff;font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;justify-content:center;transition:all .2s;box-shadow:0 4px 12px rgba(239,68,68,0.3)"
-        onmouseover="this.style.background='#dc2626'" onmouseout="this.style.background='#ef4444'">
+      <button onclick="closeModal('modal-confirm-delete')" class="btn btn-secondary" style="min-width:110px;justify-content:center">Batal</button>
+      <button id="confirm-delete-btn" onclick="confirmDeleteItem()" class="btn btn-danger" style="min-width:110px;justify-content:center">
         <i data-feather="trash-2" style="width:14px;height:14px"></i> Hapus
       </button>
     </div>
   </div>
 </div>
 
-<!-- Modal Konfirmasi Hapus Produk -->
+<!-- Modal Konfirmasi Nonaktifkan Produk -->
 <div class="modal-overlay" id="modal-confirm-delete-product">
-  <div class="modal" style="max-width:380px;text-align:center;background:#ffffff;border:none;box-shadow:0 20px 60px rgba(0,0,0,0.3)">
-    <div style="width:64px;height:64px;border-radius:50%;background:#fff7ed;border:2px solid #fed7aa;display:flex;align-items:center;justify-content:center;margin:0 auto 20px">
+  <div class="modal" style="max-width:360px;text-align:center">
+    <div style="width:64px;height:64px;border-radius:50%;background:rgba(249,115,22,0.12);border:2px solid rgba(249,115,22,0.3);display:flex;align-items:center;justify-content:center;margin:0 auto 20px">
       <i data-feather="eye-off" style="width:28px;height:28px;stroke:#f97316"></i>
     </div>
-    <div style="font-size:18px;font-weight:700;color:#111827;margin-bottom:8px">Nonaktifkan Produk?</div>
-    <div style="font-size:13px;color:#6b7280;margin-bottom:6px">Produk <strong id="confirm-delete-product-name" style="color:#111827"></strong> akan disembunyikan dari daftar.</div>
-    <div style="font-size:12px;color:#9ca3af;margin-bottom:28px">Bisa diaktifkan kembali kapan saja.</div>
+    <div style="font-size:18px;font-weight:700;margin-bottom:8px">Nonaktifkan Produk?</div>
+    <div style="font-size:13px;color:var(--text-muted);margin-bottom:6px">Produk <strong id="confirm-delete-product-name" style="color:var(--text-primary)"></strong> akan disembunyikan dari daftar.</div>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:28px">Bisa diaktifkan kembali kapan saja.</div>
     <div style="display:flex;gap:10px;justify-content:center">
-      <button onclick="closeModal('modal-confirm-delete-product')"
-        style="min-width:110px;padding:10px 20px;border-radius:8px;border:1px solid #e5e7eb;background:#f9fafb;color:#374151;font-size:14px;font-weight:600;cursor:pointer;transition:all .2s"
-        onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background='#f9fafb'">
-        Batal
-      </button>
-      <button id="confirm-delete-product-btn" onclick="confirmDeleteProduct()"
-        style="min-width:110px;padding:10px 20px;border-radius:8px;border:none;background:#f97316;color:#fff;font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;justify-content:center;transition:all .2s;box-shadow:0 4px 12px rgba(249,115,22,0.3)"
-        onmouseover="this.style.background='#ea6c0a'" onmouseout="this.style.background='#f97316'">
+      <button onclick="closeModal('modal-confirm-delete-product')" class="btn btn-secondary" style="min-width:110px;justify-content:center">Batal</button>
+      <button id="confirm-delete-product-btn" onclick="confirmDeleteProduct()" class="btn btn-warning" style="min-width:110px;justify-content:center">
         <i data-feather="eye-off" style="width:14px;height:14px"></i> Nonaktifkan
       </button>
     </div>
@@ -1301,18 +1296,18 @@ $userInfo = getUserInfo();
 
 <!-- Modal Konfirmasi Hapus Pelanggan -->
 <div class="modal-overlay" id="modal-confirm-delete-customer">
-  <div class="modal" style="max-width:380px;text-align:center">
+  <div class="modal" style="max-width:360px;text-align:center">
     <div style="width:64px;height:64px;border-radius:50%;background:rgba(239,68,68,0.12);border:2px solid rgba(239,68,68,0.3);display:flex;align-items:center;justify-content:center;margin:0 auto 20px">
       <i data-feather="user-x" style="width:28px;height:28px;stroke:#ef4444"></i>
     </div>
     <div style="font-size:18px;font-weight:700;margin-bottom:8px">Hapus Pelanggan?</div>
     <div style="font-size:13px;color:var(--text-muted);margin-bottom:6px">
-      Pelanggan <strong id="confirm-delete-customer-name" style="color:var(--text-primary)"></strong> akan dihapus.
+      Pelanggan <strong id="confirm-delete-customer-name" style="color:var(--text-primary)"></strong> akan dihapus permanen.
     </div>
     <div style="font-size:12px;color:var(--text-muted);margin-bottom:28px">Tindakan ini tidak dapat dibatalkan.</div>
     <div style="display:flex;gap:10px;justify-content:center">
-      <button onclick="closeModal('modal-confirm-delete-customer')" class="btn btn-secondary" style="min-width:110px">Batal</button>
-      <button id="confirm-delete-customer-btn" onclick="confirmDeleteCustomer()" class="btn btn-danger" style="min-width:110px">
+      <button onclick="closeModal('modal-confirm-delete-customer')" class="btn btn-secondary" style="min-width:110px;justify-content:center">Batal</button>
+      <button id="confirm-delete-customer-btn" onclick="confirmDeleteCustomer()" class="btn btn-danger" style="min-width:110px;justify-content:center">
         <i data-feather="trash-2" style="width:14px;height:14px"></i> Hapus
       </button>
     </div>
@@ -1321,25 +1316,23 @@ $userInfo = getUserInfo();
 
 <!-- Modal Konfirmasi Hapus User -->
 <div class="modal-overlay" id="modal-confirm-toggle-user">
-  <div class="modal" style="max-width:380px;text-align:center">
-    <div id="modal-toggle-user-icon" style="width:64px;height:64px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 20px">
-      <i id="modal-toggle-user-icon-i" data-feather="user-x" style="width:28px;height:28px"></i>
+  <div class="modal" style="max-width:360px;text-align:center">
+    <div id="modal-toggle-user-icon" style="width:64px;height:64px;border-radius:50%;background:rgba(239,68,68,0.12);border:2px solid rgba(239,68,68,0.3);display:flex;align-items:center;justify-content:center;margin:0 auto 20px">
+      <i id="modal-toggle-user-icon-i" data-feather="trash-2" style="width:28px;height:28px;stroke:#ef4444"></i>
     </div>
-    <div id="modal-toggle-user-title" style="font-size:18px;font-weight:700;margin-bottom:8px">Nonaktifkan User?</div>
+    <div id="modal-toggle-user-title" style="font-size:18px;font-weight:700;margin-bottom:8px">Hapus User?</div>
     <div style="font-size:13px;color:var(--text-muted);margin-bottom:6px">
       User <strong id="modal-toggle-user-name" style="color:var(--text-primary)"></strong>
-      akan <span id="modal-toggle-user-action">dinonaktifkan</span>.
+      akan <span id="modal-toggle-user-action">dihapus permanen</span>.
     </div>
     <div style="font-size:12px;color:var(--text-muted);margin-bottom:28px">Tindakan ini tidak dapat dibatalkan.</div>
     <div style="display:flex;gap:10px;justify-content:center">
-      <button onclick="closeModal('modal-confirm-toggle-user')"
-        class="btn btn-secondary" style="min-width:110px">
+      <button onclick="closeModal('modal-confirm-toggle-user')" class="btn btn-secondary" style="min-width:110px;justify-content:center">
         Batal
       </button>
-      <button id="confirm-toggle-user-btn" onclick="confirmToggleUser()"
-        class="btn btn-danger" style="min-width:110px">
-        <i data-feather="user-x" style="width:14px;height:14px"></i>
-        <span id="confirm-toggle-user-label">Nonaktifkan</span>
+      <button id="confirm-toggle-user-btn" onclick="confirmToggleUser()" class="btn btn-danger" style="min-width:110px;justify-content:center">
+        <i data-feather="trash-2" style="width:14px;height:14px"></i>
+        <span id="confirm-toggle-user-label">Hapus</span>
       </button>
     </div>
   </div>
@@ -1355,6 +1348,77 @@ $userInfo = getUserInfo();
 
 <!-- ===== PRINT ROOT — hanya elemen ini yang tampil saat Ctrl+P ===== -->
 <div id="print-nota-root"></div>
+
+<!-- Modal Konfirmasi Logout -->
+<div class="modal-overlay" id="modal-confirm-logout">
+  <div class="modal" style="max-width:360px;text-align:center">
+    <div style="width:64px;height:64px;border-radius:50%;background:rgba(99,102,241,0.12);border:2px solid rgba(99,102,241,0.3);display:flex;align-items:center;justify-content:center;margin:0 auto 20px">
+      <i data-feather="log-out" style="width:28px;height:28px;stroke:#a5b4fc"></i>
+    </div>
+    <div style="font-size:18px;font-weight:700;margin-bottom:8px">Keluar dari Sistem?</div>
+    <div style="font-size:13px;color:var(--text-muted);margin-bottom:28px">Sesi kamu akan diakhiri. Pastikan semua pekerjaan sudah tersimpan.</div>
+    <div style="display:flex;gap:10px;justify-content:center">
+      <button onclick="closeModal('modal-confirm-logout')" class="btn btn-secondary" style="min-width:110px;justify-content:center">
+        Batal
+      </button>
+      <button onclick="doLogout()" class="btn btn-primary" style="min-width:110px">
+        <i data-feather="log-out" style="width:14px;height:14px"></i> Ya, Keluar
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Logout Transition Overlay -->
+<div id="logout-overlay" style="
+    position:fixed;inset:0;z-index:99999;
+    display:flex;align-items:center;justify-content:center;
+    pointer-events:none;overflow:hidden;
+    opacity:0;transition:opacity .3s ease;
+">
+  <div id="logout-backdrop" style="
+    position:absolute;inset:0;
+    background:rgba(8,8,24,0);
+    backdrop-filter:blur(0px);
+    -webkit-backdrop-filter:blur(0px);
+    transition:background .5s ease,backdrop-filter .5s ease;
+  "></div>
+  <div style="
+    position:absolute;inset:0;
+    background-image:linear-gradient(rgba(99,102,241,0.04) 1px,transparent 1px),linear-gradient(90deg,rgba(99,102,241,0.04) 1px,transparent 1px);
+    background-size:60px 60px;opacity:0;transition:opacity .6s ease .3s;
+  " id="logout-grid"></div>
+  <div id="logout-orb" style="
+    position:absolute;width:600px;height:600px;border-radius:50%;
+    background:radial-gradient(circle,rgba(99,102,241,0.12) 0%,transparent 70%);
+    top:50%;left:50%;transform:translate(-50%,-50%) scale(0);
+    transition:transform .8s cubic-bezier(0.34,1.56,0.64,1) .2s;
+  "></div>
+  <div id="logout-stars"></div>
+  <div id="logout-content" style="
+    position:relative;z-index:1;text-align:center;
+    opacity:0;transform:translateY(20px) scale(.95);
+    transition:opacity .5s ease .45s,transform .5s cubic-bezier(0.34,1.2,0.64,1) .45s;
+  ">
+    <div style="
+      width:80px;height:80px;
+      background:linear-gradient(135deg,rgba(99,102,241,0.3),rgba(139,92,246,0.2));
+      border-radius:24px;display:flex;align-items:center;justify-content:center;
+      margin:0 auto 20px;
+      border:1px solid rgba(99,102,241,0.4);
+      box-shadow:0 0 40px rgba(99,102,241,0.3),inset 0 1px 0 rgba(255,255,255,0.1);
+      transform:scale(0) rotate(-10deg);
+      transition:transform .5s cubic-bezier(0.34,1.56,0.64,1) .6s;
+    " id="logout-icon">
+      <i class="bi bi-box-arrow-left" style="font-size:34px;color:#a5b4fc"></i>
+    </div>
+    <div style="font-size:11px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:rgba(165,180,252,0.6);margin-bottom:8px">Sampai Jumpa</div>
+    <div style="font-size:28px;font-weight:900;letter-spacing:-1px;line-height:1;margin-bottom:8px;background:linear-gradient(135deg,#a5b4fc,#c4b5fd,#67e8f9);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text"><?= htmlspecialchars($_SESSION['user_name'] ?? '') ?></div>
+    <div style="font-size:13px;color:rgba(148,163,184,0.6);margin-bottom:28px">Sesi kamu telah berakhir...</div>
+    <div style="width:200px;height:2px;background:rgba(99,102,241,0.15);border-radius:2px;margin:0 auto;overflow:hidden">
+      <div id="logout-progress" style="height:100%;width:0%;background:linear-gradient(90deg,#6366f1,#a78bfa,#67e8f9);border-radius:2px;transition:width 1.4s cubic-bezier(0.4,0,0.2,1) .7s"></div>
+    </div>
+  </div>
+</div>
 
 <script src="js/app.js?v=<?= time() ?>"></script>
 <script>

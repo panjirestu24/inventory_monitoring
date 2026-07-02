@@ -241,78 +241,124 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         /* ── SUCCESS TRANSITION OVERLAY ─────────────────────── */
         #login-overlay {
             position: fixed; inset: 0; z-index: 9999;
-            display: flex; flex-direction: column;
-            align-items: center; justify-content: center;
-            gap: 20px;
-            opacity: 0; pointer-events: none;
-            transition: opacity .4s ease;
+            display: flex; align-items: center; justify-content: center;
+            pointer-events: none;
+            overflow: hidden;
         }
-        #login-overlay.show { opacity: 1; pointer-events: all; }
 
-        /* Ripple circle expansion */
-        .overlay-ripple {
+        /* Layer 1: backdrop blur + dark fade */
+        .overlay-backdrop {
             position: absolute; inset: 0;
-            background: radial-gradient(circle at center, #6366f1 0%, #4f46e5 30%, #080818 70%);
-            transform: scale(0);
-            border-radius: 50%;
-            transition: transform 0.8s cubic-bezier(0.4,0,0.2,1);
+            background: rgba(8,8,24,0);
+            backdrop-filter: blur(0px);
+            -webkit-backdrop-filter: blur(0px);
+            transition: background 0.5s ease, backdrop-filter 0.5s ease;
         }
-        #login-overlay.show .overlay-ripple {
-            transform: scale(4);
-            border-radius: 0;
+        #login-overlay.show .overlay-backdrop {
+            background: rgba(8,8,24,0.96);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
         }
 
-        /* Content inside overlay */
+        /* Layer 2: animated grid lines */
+        .overlay-grid {
+            position: absolute; inset: 0;
+            background-image:
+                linear-gradient(rgba(99,102,241,0.04) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(99,102,241,0.04) 1px, transparent 1px);
+            background-size: 60px 60px;
+            opacity: 0;
+            transition: opacity 0.6s ease 0.3s;
+        }
+        #login-overlay.show .overlay-grid { opacity: 1; }
+
+        /* Layer 3: glowing orb */
+        .overlay-orb {
+            position: absolute;
+            width: 600px; height: 600px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(99,102,241,0.15) 0%, transparent 70%);
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%) scale(0);
+            transition: transform 0.8s cubic-bezier(0.34,1.56,0.64,1) 0.2s;
+        }
+        #login-overlay.show .overlay-orb { transform: translate(-50%, -50%) scale(1); }
+
+        /* Layer 4: bintang / partikel */
+        .overlay-stars { position: absolute; inset: 0; pointer-events: none; }
+        .overlay-star {
+            position: absolute;
+            border-radius: 50%;
+            opacity: 0;
+            animation: starFloat linear infinite;
+        }
+        @keyframes starFloat {
+            0%   { transform: translateY(0)   scale(0);   opacity: 0; }
+            10%  { opacity: 1; }
+            90%  { opacity: .6; }
+            100% { transform: translateY(-110vh) scale(1.2); opacity: 0; }
+        }
+
+        /* Content */
         .overlay-content {
             position: relative; z-index: 1;
             text-align: center;
-            opacity: 0; transform: translateY(16px);
-            transition: opacity .4s ease .5s, transform .4s ease .5s;
+            opacity: 0; transform: translateY(24px) scale(0.95);
+            transition: opacity 0.5s ease 0.45s, transform 0.5s cubic-bezier(0.34,1.2,0.64,1) 0.45s;
         }
-        #login-overlay.show .overlay-content { opacity: 1; transform: translateY(0); }
+        #login-overlay.show .overlay-content { opacity: 1; transform: translateY(0) scale(1); }
 
+        /* Check icon */
         .overlay-icon {
-            width: 72px; height: 72px;
-            background: rgba(255,255,255,0.15);
-            border-radius: 50%;
+            width: 80px; height: 80px;
+            background: linear-gradient(135deg, rgba(99,102,241,0.3), rgba(139,92,246,0.2));
+            border-radius: 24px;
             display: flex; align-items: center; justify-content: center;
-            margin: 0 auto 16px;
-            border: 2px solid rgba(255,255,255,0.3);
-            animation: none;
+            margin: 0 auto 20px;
+            border: 1px solid rgba(99,102,241,0.4);
+            box-shadow: 0 0 40px rgba(99,102,241,0.3), inset 0 1px 0 rgba(255,255,255,0.1);
+            transform: scale(0) rotate(-10deg);
+            transition: transform 0.5s cubic-bezier(0.34,1.56,0.64,1) 0.6s;
         }
-        #login-overlay.show .overlay-icon { animation: iconPop .5s ease .4s both; }
-        @keyframes iconPop {
-            from { transform: scale(0.5); opacity: 0; }
-            60%  { transform: scale(1.15); }
-            to   { transform: scale(1);   opacity: 1; }
-        }
-        .overlay-icon i { font-size: 34px; color: white; }
+        #login-overlay.show .overlay-icon { transform: scale(1) rotate(0deg); }
+        .overlay-icon i { font-size: 36px; color: #a5b4fc; }
 
+        /* Text */
         .overlay-welcome {
-            font-size: 13px; font-weight: 600;
-            color: rgba(255,255,255,0.7);
-            text-transform: uppercase; letter-spacing: 2px;
-            margin-bottom: 6px;
+            font-size: 11px; font-weight: 700; letter-spacing: 3px;
+            text-transform: uppercase; color: rgba(165,180,252,0.6);
+            margin-bottom: 8px;
         }
         .overlay-name {
-            font-size: 28px; font-weight: 900; color: white;
-            letter-spacing: -0.5px;
+            font-size: 32px; font-weight: 900; color: #f1f5f9;
+            letter-spacing: -1px; line-height: 1;
+            margin-bottom: 8px;
         }
-        .overlay-sub { font-size: 13px; color: rgba(255,255,255,0.5); margin-top: 6px; }
+        .overlay-name span {
+            background: linear-gradient(135deg, #a5b4fc, #c4b5fd, #67e8f9);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .overlay-sub {
+            font-size: 13px; color: rgba(148,163,184,0.6);
+            margin-bottom: 28px;
+        }
 
-        /* Loading dots */
-        .overlay-dots { display: flex; gap: 6px; justify-content: center; margin-top: 24px; }
-        .overlay-dots span {
-            width: 6px; height: 6px; border-radius: 50%;
-            background: rgba(255,255,255,0.4);
-            animation: dotPulse 1.2s ease-in-out infinite;
+        /* Progress bar */
+        .overlay-progress {
+            width: 200px; height: 2px;
+            background: rgba(99,102,241,0.15);
+            border-radius: 2px;
+            margin: 0 auto;
+            overflow: hidden;
         }
-        .overlay-dots span:nth-child(2) { animation-delay: .2s; }
-        .overlay-dots span:nth-child(3) { animation-delay: .4s; }
-        @keyframes dotPulse {
-            0%,80%,100% { transform: scale(.7); opacity: .4; }
-            40%          { transform: scale(1);  opacity: 1; }
+        .overlay-progress-fill {
+            height: 100%; width: 0%;
+            background: linear-gradient(90deg, #6366f1, #a78bfa, #67e8f9);
+            border-radius: 2px;
+            transition: width 1.4s cubic-bezier(0.4,0,0.2,1) 0.7s;
         }
+        #login-overlay.show .overlay-progress-fill { width: 100%; }
     </style>
 </head>
 <body>
@@ -376,16 +422,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 <!-- Success Transition Overlay -->
 <div id="login-overlay">
-    <div class="overlay-ripple"></div>
+    <div class="overlay-backdrop"></div>
+    <div class="overlay-grid"></div>
+    <div class="overlay-orb"></div>
+    <div class="overlay-stars" id="overlay-stars"></div>
     <div class="overlay-content">
         <div class="overlay-icon">
-            <i class="bi bi-check-lg"></i>
+            <i class="bi bi-check2-circle"></i>
         </div>
-        <div class="overlay-welcome">Selamat datang kembali</div>
-        <div class="overlay-name" id="overlay-name"><?= htmlspecialchars($userName) ?></div>
+        <div class="overlay-welcome">Selamat datang</div>
+        <div class="overlay-name"><span><?= htmlspecialchars($userName) ?></span></div>
         <div class="overlay-sub">Mengarahkan ke dashboard...</div>
-        <div class="overlay-dots">
-            <span></span><span></span><span></span>
+        <div class="overlay-progress">
+            <div class="overlay-progress-fill"></div>
         </div>
     </div>
 </div>
@@ -440,15 +489,48 @@ function handleLogin(e) {
 // ── Login success transition ──────────────────────────────
 <?php if ($loginOk): ?>
 window.addEventListener('DOMContentLoaded', () => {
-    // Kecil delay agar halaman render dulu
     setTimeout(() => {
-        const overlay = document.getElementById('login-overlay');
-        overlay.classList.add('show');
-        // Redirect setelah animasi selesai
+        // Blur & fade login card dulu
+        const card = document.getElementById('login-card');
+        if (card) {
+            card.style.transition = 'opacity 0.4s ease, transform 0.4s ease, filter 0.4s ease';
+            card.style.opacity    = '0';
+            card.style.transform  = 'scale(0.96) translateY(-8px)';
+            card.style.filter     = 'blur(4px)';
+        }
+
+        // Generate bintang di overlay
+        const starsContainer = document.getElementById('overlay-stars');
+        const colors = ['#a5b4fc','#c4b5fd','#67e8f9','#f0abfc','#ffffff'];
+        for (let i = 0; i < 60; i++) {
+            const star = document.createElement('div');
+            star.className = 'overlay-star';
+            const size  = Math.random() * 3 + 1;
+            const color = colors[Math.floor(Math.random() * colors.length)];
+            const dur   = Math.random() * 4 + 2;
+            const delay = Math.random() * 2;
+            const left  = Math.random() * 100;
+            star.style.cssText = `
+                width:${size}px; height:${size}px;
+                background:${color};
+                left:${left}%;
+                bottom:${Math.random() * 20}%;
+                box-shadow: 0 0 ${size * 2}px ${color};
+                animation-duration:${dur}s;
+                animation-delay:${delay}s;
+            `;
+            starsContainer.appendChild(star);
+        }
+
+        // Tampilkan overlay
         setTimeout(() => {
-            window.location.href = 'index.php';
-        }, 1800);
-    }, 150);
+            document.getElementById('login-overlay').classList.add('show');
+            // Redirect setelah progress bar selesai
+            setTimeout(() => {
+                window.location.href = 'index.php';
+            }, 2200);
+        }, 300);
+    }, 100);
 });
 <?php elseif ($error): ?>
 // Shake card jika error

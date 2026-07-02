@@ -194,7 +194,7 @@ async function updateSidebarBadges() {
 
 function startBadgePolling() {
   updateSidebarBadges();                          // langsung sekali saat load
-  setInterval(updateSidebarBadges, 10000);        // lalu setiap 10 detik
+  setInterval(updateSidebarBadges, 3000);        // lalu setiap 3 detik
 }
 
 // ============================================================
@@ -1140,7 +1140,7 @@ async function reactivateProduct(id) {
   if (!product) { showToast('Produk tidak ditemukan', 'error'); return; }
 
   const res = await apiPut(`${API}products.php`, {
-    id:            product.id,
+    id:            product.id_products,
     name:          product.name,
     category_id:   product.category_id || null,
     unit_id:       product.unit_id     || null,
@@ -1258,6 +1258,38 @@ async function loadOrderInputPage() {
 
 // ---- Autocomplete pelanggan ----
 function niSearchCustomer(q) {
+
+// ---- Cek duplikat nomor HP ----
+let _niPhoneCheckTimeout = null;
+function niCekDuplikatHP(val) {
+  const warning = document.getElementById('ni-phone-warning');
+  const text    = document.getElementById('ni-phone-warning-text');
+  if (!warning || !text) return;
+
+  warning.style.display = 'none';
+
+  // Minimal 8 digit angka
+  const digits = val.replace(/[^0-9]/g, '');
+  if (digits.length < 8) return;
+
+  clearTimeout(_niPhoneCheckTimeout);
+  _niPhoneCheckTimeout = setTimeout(async () => {
+    const res = await apiFetch(`api/customers.php?action=check_phone&phone=${encodeURIComponent(val)}`);
+    if (res?.found && res.data) {
+      const c = res.data;
+      text.textContent  = `No. HP sudah terdaftar atas nama "${c.name}"${c.city ? ' (' + c.city + ')' : ''} — order akan dikaitkan ke pelanggan ini.`;
+      warning.style.display = 'flex';
+
+      // Auto-isi nama kalau field nama masih kosong
+      const nameField = document.getElementById('ni-cust-name');
+      if (nameField && !nameField.value.trim()) {
+        nameField.value = c.name;
+      }
+    } else {
+      warning.style.display = 'none';
+    }
+  }, 600);
+}
   clearTimeout(niSearchTimeout);
   const dd = document.getElementById('ni-cust-dropdown');
   if (q.length < 2) { dd.style.display = 'none'; return; }
@@ -1428,6 +1460,32 @@ async function niSimpanOrder() {
   if (niItems.some(i => !i.name.trim())){ showToast('Nama item tidak boleh kosong', 'warning'); return; }
   if (niItems.some(i => i.price < 1))  { showToast('Harga item tidak boleh 0', 'warning'); return; }
   if (!due)          { showToast('Jatuh tempo wajib diisi', 'warning'); return; }
+
+  // Blokir jika HP sudah terdaftar dengan nama berbeda
+  const digits = phone.replace(/[^0-9]/g, '');
+  if (digits.length >= 8) {
+    const chk = await apiFetch(`api/customers.php?action=check_phone&phone=${encodeURIComponent(phone)}`);
+    if (chk?.found && chk.data) {
+      const existingName = chk.data.name.toLowerCase().trim();
+      const inputName    = name.toLowerCase().trim();
+      if (existingName !== inputName) {
+        showToast(
+          `No. HP sudah terdaftar atas nama "${chk.data.name}". Gunakan nama yang sama atau ganti nomor HP.`,
+          'error'
+        );
+        // Tampilkan juga warning di field
+        const w = document.getElementById('ni-phone-warning');
+        const t = document.getElementById('ni-phone-warning-text');
+        if (w && t) {
+          t.textContent = `No. HP sudah terdaftar atas nama "${chk.data.name}" — gunakan nama yang sama atau ganti nomor HP.`;
+          w.style.display = 'flex';
+        }
+        const btn2 = document.getElementById('ni-btn-simpan');
+        if (btn2) { btn2.disabled = false; btn2.innerHTML = '<i data-feather="save"></i> Simpan & Tampilkan Nota'; feather.replace(); }
+        return;
+      }
+    }
+  }
 
   const btn = document.getElementById('ni-btn-simpan');
   btn.disabled = true;
@@ -1617,6 +1675,9 @@ function niResetForm() {  ['ni-cust-name','ni-cust-phone','ni-cust-city','ni-cus
    'ni-cust-search','ni-notes'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
+  // Sembunyikan warning HP
+  const w = document.getElementById('ni-phone-warning');
+  if (w) w.style.display = 'none';
   ['ni-discount','ni-tax'].forEach((id, i) => {
     const el = document.getElementById(id); if (el) el.value = [0, 11][i];
   });
@@ -2639,6 +2700,59 @@ function showToast(message, type = 'info') {
   document.getElementById('toast-container').appendChild(el);
   feather.replace();
   setTimeout(() => { el.style.animation = 'slideOut 0.3s ease forwards'; setTimeout(() => el.remove(), 300); }, 3500);
+}
+
+// ============================================================
+// LOGOUT TRANSITION
+// ============================================================
+function doLogout() {
+  const overlay   = document.getElementById('logout-overlay');
+  const backdrop  = document.getElementById('logout-backdrop');
+  const grid      = document.getElementById('logout-grid');
+  const orb       = document.getElementById('logout-orb');
+  const content   = document.getElementById('logout-content');
+  const icon      = document.getElementById('logout-icon');
+  const progress  = document.getElementById('logout-progress');
+  const stars     = document.getElementById('logout-stars');
+
+  if (!overlay) { window.location.href = 'logout.php'; return; }
+
+  // Generate bintang
+  const colors = ['#a5b4fc','#c4b5fd','#67e8f9','#f0abfc','#ffffff'];
+  for (let i = 0; i < 60; i++) {
+    const s = document.createElement('div');
+    const sz  = Math.random() * 3 + 1;
+    const col = colors[Math.floor(Math.random() * colors.length)];
+    s.style.cssText = `
+      position:absolute;border-radius:50%;
+      width:${sz}px;height:${sz}px;background:${col};
+      left:${Math.random()*100}%;bottom:${Math.random()*20}%;
+      box-shadow:0 0 ${sz*2}px ${col};opacity:0;
+      animation:starFloat ${Math.random()*4+2}s linear ${Math.random()*2}s infinite;
+    `;
+    stars.appendChild(s);
+  }
+
+  // Tampilkan overlay
+  overlay.style.opacity       = '1';
+  overlay.style.pointerEvents = 'all';
+
+  setTimeout(() => {
+    backdrop.style.background          = 'rgba(8,8,24,0.96)';
+    backdrop.style.backdropFilter      = 'blur(20px)';
+    backdrop.style.webkitBackdropFilter= 'blur(20px)';
+    grid.style.opacity    = '1';
+    orb.style.transform   = 'translate(-50%,-50%) scale(1)';
+    content.style.opacity = '1';
+    content.style.transform = 'translateY(0) scale(1)';
+    icon.style.transform  = 'scale(1) rotate(0deg)';
+    progress.style.width  = '100%';
+  }, 50);
+
+  // Redirect ke logout.php setelah animasi selesai
+  setTimeout(() => {
+    window.location.href = 'logout.php';
+  }, 2400);
 }
 
 // ============================================================
