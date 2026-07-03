@@ -208,24 +208,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         /* ── Submit Button ──────────────────────────────────── */
         .btn-login {
             width: 100%;
-            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            background: #6366f1;
             color: white; border: none; border-radius: 10px;
             padding: 14px; font-size: 15px; font-weight: 700;
             cursor: pointer; margin-top: 8px;
             transition: all .3s ease;
-            box-shadow: 0 4px 20px rgba(99,102,241,0.4), inset 0 1px 0 rgba(255,255,255,0.1);
+            box-shadow: 0 2px 10px rgba(99,102,241,0.3), inset 0 1px 0 rgba(255,255,255,0.1);
             letter-spacing: 0.2px;
             display: flex; align-items: center; justify-content: center; gap: 8px;
             position: relative; overflow: hidden;
         }
-        .btn-login::before {
-            content: '';
-            position: absolute; inset: 0;
-            background: linear-gradient(135deg, rgba(255,255,255,0.1), transparent);
-            opacity: 0; transition: opacity .3s;
-        }
-        .btn-login:hover { box-shadow: 0 6px 30px rgba(99,102,241,0.6); transform: translateY(-2px); }
-        .btn-login:hover::before { opacity: 1; }
+        .btn-login:hover { background: #5558e8; box-shadow: 0 4px 16px rgba(99,102,241,0.4); transform: translateY(-1px); }
         .btn-login:active { transform: translateY(0); }
         .btn-login:disabled { opacity: .6; cursor: not-allowed; transform: none; }
         .btn-login .spinner {
