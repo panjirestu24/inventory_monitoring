@@ -76,6 +76,30 @@ $chartOrders = $stmt->fetchAll();
 $stmt = $pdo->query("SELECT c.name, SUM(i.stock * i.purchase_price) as value FROM items i JOIN categories c ON i.category_id=c.id_categories WHERE i.is_active=1 GROUP BY c.id_categories,c.name ORDER BY value DESC");
 $chartStock = $stmt->fetchAll();
 
+// --- CHART: Throughput Produksi — Order Selesai & Masuk per Hari (14 Hari) ---
+$stmt = $pdo->query(
+    "SELECT
+        DATE(created_at) as date,
+        COUNT(*) as masuk,
+        SUM(CASE WHEN status='completed' AND DATE(completed_date) = DATE(created_at) THEN 1 ELSE 0 END) as selesai_hari_itu
+     FROM orders
+     WHERE created_at >= DATE_SUB(NOW(), INTERVAL 14 DAY)
+     GROUP BY DATE(created_at)
+     ORDER BY date"
+);
+$chartThroughput = $stmt->fetchAll();
+
+// Order selesai per hari (14 hari) — pakai completed_date
+$stmt = $pdo->query(
+    "SELECT DATE(completed_date) as date, COUNT(*) as selesai
+     FROM orders
+     WHERE status = 'completed'
+     AND completed_date >= DATE_SUB(NOW(), INTERVAL 14 DAY)
+     GROUP BY DATE(completed_date)
+     ORDER BY date"
+);
+$chartCompleted = $stmt->fetchAll();
+
 // --- NOTIFIKASI TERBARU (5 Teratas) ---
 $stmt = $pdo->query("SELECT * FROM notifications ORDER BY created_at DESC LIMIT 5");
 $notifications = $stmt->fetchAll();
@@ -89,6 +113,7 @@ echo json_encode([
     'recent_orders'  => $recentOrders,
     'chart_orders'   => $chartOrders,
     'chart_stock'    => $chartStock,
+    'chart_throughput' => $chartCompleted,
     'notifications'  => $notifications,
     'timestamp'      => date('Y-m-d H:i:s'),
 ]);

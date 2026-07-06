@@ -270,6 +270,22 @@ $userInfo = getUserInfo();
           </div>
         </div>
 
+        <!-- Chart Throughput MES -->
+        <div class="card mb-6">
+          <div class="card-header">
+            <div>
+              <div class="card-title">
+                <i class="bi bi-graph-up-arrow" style="color:var(--success);margin-right:6px"></i>
+                Throughput Produksi — 14 Hari Terakhir
+              </div>
+              <div class="card-subtitle">Jumlah order yang diselesaikan per hari (MES KPI)</div>
+            </div>
+          </div>
+          <div class="chart-container" style="height:200px">
+            <canvas id="chartThroughput"></canvas>
+          </div>
+        </div>
+
         <!-- Stok Kritis -->
         <div class="card mb-6">
           <div class="card-header">
@@ -450,7 +466,7 @@ $userInfo = getUserInfo();
                 </tr>
               </thead>
               <tbody id="mutations-tbody">
-                <tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:24px">Pilih item untuk melihat riwayat</td></tr>
+                <tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:24px">Memuat riwayat...</td></tr>
               </tbody>
             </table>
           </div>
@@ -889,6 +905,7 @@ $userInfo = getUserInfo();
           <div class="tab-pill active" onclick="switchReportTab(this,'stock')">Laporan Stok</div>
           <div class="tab-pill" onclick="switchReportTab(this,'transactions')">Mutasi Stok</div>
           <div class="tab-pill" onclick="switchReportTab(this,'orders')">Laporan Order</div>
+          <div class="tab-pill" onclick="switchReportTab(this,'deliveries')">Pengiriman</div>
         </div>
 
         <!-- Date filter -->
@@ -1348,6 +1365,68 @@ $userInfo = getUserInfo();
 
 <!-- ===== PRINT ROOT — hanya elemen ini yang tampil saat Ctrl+P ===== -->
 <div id="print-nota-root"></div>
+
+<!-- Modal Konfirmasi Update Status Pengiriman (Stepper) -->
+<div class="modal-overlay" id="modal-confirm-status-delivery">
+  <div class="modal" style="max-width:360px;text-align:center">
+    <div style="width:64px;height:64px;border-radius:50%;background:rgba(6,182,212,0.12);border:2px solid rgba(6,182,212,0.3);display:flex;align-items:center;justify-content:center;margin:0 auto 20px">
+      <i data-feather="truck" style="width:28px;height:28px;stroke:#22d3ee"></i>
+    </div>
+    <div style="font-size:18px;font-weight:700;margin-bottom:8px">Update Status Pengiriman?</div>
+    <div style="font-size:13px;color:var(--text-muted);margin-bottom:6px">
+      Pengiriman order <strong id="confirm-status-delivery-num" style="color:var(--text-primary)"></strong>
+      akan dipindahkan ke status <strong id="confirm-status-delivery-next" style="color:#22d3ee"></strong>.
+    </div>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:28px">Pastikan tahap sebelumnya sudah selesai.</div>
+    <div style="display:flex;gap:10px;justify-content:center">
+      <button onclick="closeModal('modal-confirm-status-delivery')" class="btn btn-secondary" style="min-width:110px;justify-content:center">Batal</button>
+      <button id="confirm-status-delivery-btn" onclick="confirmUpdateDeliveryStatus()" class="btn btn-primary" style="min-width:110px;justify-content:center">
+        <i data-feather="check" style="width:14px;height:14px"></i> Ya, Update
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Konfirmasi Update Status Order (Stepper) -->
+<div class="modal-overlay" id="modal-confirm-status-order">
+  <div class="modal" style="max-width:360px;text-align:center">
+    <div style="width:64px;height:64px;border-radius:50%;background:rgba(99,102,241,0.12);border:2px solid rgba(99,102,241,0.3);display:flex;align-items:center;justify-content:center;margin:0 auto 20px">
+      <i data-feather="arrow-right-circle" style="width:28px;height:28px;stroke:#a5b4fc"></i>
+    </div>
+    <div style="font-size:18px;font-weight:700;margin-bottom:8px">Update Status?</div>
+    <div style="font-size:13px;color:var(--text-muted);margin-bottom:6px">
+      Order <strong id="confirm-status-order-num" style="color:var(--text-primary)"></strong>
+      akan dipindahkan ke status <strong id="confirm-status-order-next" style="color:#a5b4fc"></strong>.
+    </div>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:28px">Pastikan tahap sebelumnya sudah selesai.</div>
+    <div style="display:flex;gap:10px;justify-content:center">
+      <button onclick="closeModal('modal-confirm-status-order')" class="btn btn-secondary" style="min-width:110px;justify-content:center">Batal</button>
+      <button id="confirm-status-order-btn" onclick="confirmUpdateStatus()" class="btn btn-primary" style="min-width:110px;justify-content:center">
+        <i data-feather="check" style="width:14px;height:14px"></i> Ya, Update
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Konfirmasi Batalkan Order -->
+<div class="modal-overlay" id="modal-confirm-cancel-order">
+  <div class="modal" style="max-width:360px;text-align:center">
+    <div style="width:64px;height:64px;border-radius:50%;background:rgba(239,68,68,0.12);border:2px solid rgba(239,68,68,0.3);display:flex;align-items:center;justify-content:center;margin:0 auto 20px">
+      <i data-feather="x-circle" style="width:28px;height:28px;stroke:#ef4444"></i>
+    </div>
+    <div style="font-size:18px;font-weight:700;margin-bottom:8px">Batalkan Order?</div>
+    <div style="font-size:13px;color:var(--text-muted);margin-bottom:6px">
+      Order <strong id="confirm-cancel-order-num" style="color:var(--text-primary)"></strong> akan dibatalkan.
+    </div>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:28px">Order yang dibatalkan tidak dapat diproses kembali.</div>
+    <div style="display:flex;gap:10px;justify-content:center">
+      <button onclick="closeModal('modal-confirm-cancel-order')" class="btn btn-secondary" style="min-width:110px;justify-content:center">Batal</button>
+      <button id="confirm-cancel-order-btn" onclick="confirmCancelOrder()" class="btn btn-danger" style="min-width:110px;justify-content:center">
+        <i data-feather="x" style="width:14px;height:14px"></i> Ya, Batalkan
+      </button>
+    </div>
+  </div>
+</div>
 
 <!-- Modal Konfirmasi Logout -->
 <div class="modal-overlay" id="modal-confirm-logout">

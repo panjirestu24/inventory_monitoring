@@ -52,8 +52,13 @@ switch ($method) {
             echo json_encode(['success' => true, 'berhasil' => (bool)$item, 'data' => $item]);
         } elseif ($action === 'transactions') {
             $id = (int)($_GET['id'] ?? 0);
-            $stmt = $pdo->prepare("SELECT st.*, u.name as user_name FROM stock_transactions st LEFT JOIN users u ON st.created_by=u.id_users WHERE st.item_id=? ORDER BY st.created_at DESC LIMIT 20");
+            $stmt = $pdo->prepare("SELECT st.*, i.name as item_name, u.name as user_name FROM stock_transactions st JOIN items i ON st.item_id=i.id_items LEFT JOIN users u ON st.created_by=u.id_users WHERE st.item_id=? ORDER BY st.created_at DESC LIMIT 50");
             $stmt->execute([$id]);
+            echo json_encode(['success' => true, 'berhasil' => true, 'data' => $stmt->fetchAll()]);
+
+        } elseif ($action === 'transactions_all') {
+            // Semua transaksi tanpa filter item — untuk riwayat global
+            $stmt = $pdo->query("SELECT st.*, i.name as item_name, u.name as user_name FROM stock_transactions st JOIN items i ON st.item_id=i.id_items LEFT JOIN users u ON st.created_by=u.id_users ORDER BY st.created_at DESC LIMIT 100");
             echo json_encode(['success' => true, 'berhasil' => true, 'data' => $stmt->fetchAll()]);
         }
         break;
@@ -61,6 +66,19 @@ switch ($method) {
     case 'POST':
         $data = json_decode(file_get_contents('php://input'), true);
         if ($action === 'add') {
+            // Validasi input
+            $code = trim($data['code'] ?? '');
+            $name = trim($data['name'] ?? '');
+            $catId = (int)($data['category_id'] ?? 0);
+            $unitId = (int)($data['unit_id'] ?? 0);
+            if (!$code) { echo json_encode(['success'=>false,'berhasil'=>false,'message'=>'Kode item wajib diisi']); exit; }
+            if (!$name) { echo json_encode(['success'=>false,'berhasil'=>false,'message'=>'Nama item wajib diisi']); exit; }
+            if (!$catId){ echo json_encode(['success'=>false,'berhasil'=>false,'message'=>'Kategori wajib dipilih']); exit; }
+            if (!$unitId){ echo json_encode(['success'=>false,'berhasil'=>false,'message'=>'Satuan wajib dipilih']); exit; }
+            // Cek kode duplikat
+            $chk = $pdo->prepare("SELECT id_items FROM items WHERE code = ?");
+            $chk->execute([$code]);
+            if ($chk->fetch()) { echo json_encode(['success'=>false,'berhasil'=>false,'message'=>"Kode '$code' sudah digunakan"]); exit; }
             $stmt = $pdo->prepare("INSERT INTO items (code, name, category_id, unit_id, description, stock, min_stock, max_stock, purchase_price, selling_price, location) VALUES (?,?,?,?,?,?,?,?,?,?,?)");
             $stmt->execute([
                 $data['code'], $data['name'], $data['category_id'], $data['unit_id'],

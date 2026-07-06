@@ -29,7 +29,28 @@ switch ($type) {
         break;
 
     case 'orders':
-        $stmt = $pdo->prepare("SELECT o.order_number, o.title, o.status, o.priority, c.name as customer, u.name as operator, o.quantity, o.grand_total, o.start_date, o.due_date, o.completed_date FROM orders o JOIN customers c ON o.customer_id=c.id_customers LEFT JOIN users u ON o.operator_id=u.id_users WHERE DATE(o.created_at) BETWEEN ? AND ? ORDER BY o.created_at DESC");
+        $stmt = $pdo->prepare("SELECT o.order_number, o.title, o.status, o.priority, c.name as customer, u.name as operator, o.quantity, o.grand_total, o.start_date, o.due_date, o.completed_date FROM orders o JOIN customers c ON o.customer_id=c.id_customers LEFT JOIN users u ON o.operator_id=u.id_users WHERE o.status IN ('completed','cancelled') AND DATE(o.created_at) BETWEEN ? AND ? ORDER BY o.created_at DESC");
+        $stmt->execute([$from, $to]);
+        echo json_encode(['success' => true, 'data' => $stmt->fetchAll()]);
+        break;
+
+    case 'deliveries':
+        $stmt = $pdo->prepare(
+            "SELECT d.created_at, o.order_number, o.title as order_title,
+                    c.name as customer, c.phone as customer_phone,
+                    d.status as delivery_status,
+                    d.destination_address, d.destination_city,
+                    d.recipient_name, d.recipient_phone,
+                    d.estimated_arrival, d.actual_arrival,
+                    d.proof_image,
+                    o.grand_total
+             FROM deliveries d
+             JOIN orders o ON d.order_id = o.id_orders
+             JOIN customers c ON o.customer_id = c.id_customers
+             WHERE d.status = 'received'
+             AND DATE(d.actual_arrival) BETWEEN ? AND ?
+             ORDER BY d.actual_arrival DESC"
+        );
         $stmt->execute([$from, $to]);
         echo json_encode(['success' => true, 'data' => $stmt->fetchAll()]);
         break;

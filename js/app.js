@@ -13,6 +13,7 @@ window.onunhandledrejection = (e) => {
 const API = 'api/';
 let chartOrders = null;
 let chartStock  = null;
+let chartThroughput = null;
 let currentPage = 'dashboard';
 let currentReportType = 'stock';
 
@@ -216,6 +217,8 @@ const pageTitles = {
 
 function navigate(page) {
   currentPage = page;
+  // Update hash URL supaya hard refresh kembali ke halaman yang sama
+  history.replaceState(null, '', '#' + page);
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
 
@@ -233,10 +236,15 @@ function navigate(page) {
     clearInterval(trackingInterval);
     trackingInterval = null;
   }
+  // Stop dashboard interval kalau pindah halaman
+  if (page !== 'dashboard' && dashboardInterval) {
+    clearInterval(dashboardInterval);
+    dashboardInterval = null;
+  }
 
   // Load page data
   switch (page) {
-    case 'dashboard':      loadDashboard(); break;
+    case 'dashboard':      loadDashboard(); startDashboardInterval(); break;
     case 'monitoring':     loadMonitoring(); break;
     case 'items':          loadItems(); break;
     case 'stock-mutation': loadStockMutationPage(); break;
@@ -355,6 +363,7 @@ async function loadDashboard() {
   // Charts
   renderOrderChart(data.chart_orders);
   renderStockChart(data.chart_stock);
+  renderThroughputChart(data.chart_throughput);
 
   feather.replace();
 }
@@ -517,10 +526,81 @@ function renderStockChart(data) {
   });
 }
 
+function renderThroughputChart(data) {
+  const ctx = document.getElementById('chartThroughput')?.getContext('2d');
+  if (!ctx) return;
+  if (chartThroughput) chartThroughput.destroy();
+
+  // Generate 14 hari terakhir sebagai label (agar hari tanpa order tetap tampil)
+  const labels = [];
+  const values = [];
+  for (let i = 13; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const key = d.toISOString().slice(0, 10);
+    labels.push(formatDateShort(key));
+    const found = data?.find(r => r.date === key);
+    values.push(found ? parseInt(found.selesai) : 0);
+  }
+
+  chartThroughput = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Order Selesai',
+        data: values,
+        borderColor: '#10b981',
+        backgroundColor: 'rgba(16,185,129,0.08)',
+        borderWidth: 2.5,
+        pointBackgroundColor: '#10b981',
+        pointBorderColor: '#10b981',
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        fill: true,
+        tension: 0.4,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            title: items => `${items[0].label}`,
+            label: item => ` ${item.raw} order diselesaikan`,
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: 'rgba(255,255,255,0.04)' },
+          ticks: { color: '#94a3b8', font: { size: 10 } }
+        },
+        y: {
+          grid: { color: 'rgba(255,255,255,0.04)' },
+          ticks: { color: '#94a3b8', font: { size: 11 }, stepSize: 1 },
+          beginAtZero: true,
+          suggestedMax: 5,
+        }
+      }
+    }
+  });
+}
+
 // ============================================================
 // MES MONITORING + FIFO TRACKING
 // ============================================================
-let trackingInterval = null;
+let trackingInterval   = null;
+let dashboardInterval  = null;
+
+function startDashboardInterval() {
+  if (dashboardInterval) clearInterval(dashboardInterval);
+  // Auto-refresh dashboard setiap 30 detik
+  dashboardInterval = setInterval(() => {
+    if (currentPage === 'dashboard') loadDashboard();
+  }, 30000);
+}
 
 async function loadMonitoring() {
   if (trackingInterval) clearInterval(trackingInterval);
@@ -850,7 +930,7 @@ async function openEditItemModal(id) {
   document.getElementById('modal-item-title').textContent = 'Edit Bahan Baku';
   
   // Isi form dengan data item
-  document.getElementById('item-id').value = item.id;
+  document.getElementById('item-id').value = item.id_items;
   document.getElementById('item-code').value = item.code;
   document.getElementById('item-code').disabled = true; // Kode tidak bisa diubah
   document.getElementById('item-name').value = item.name;
@@ -928,12 +1008,12 @@ async function loadStockMutationPage() {
     allItems = data?.data || [];
     populateItemSelects(allItems);
   }
+  // Langsung load semua riwayat mutasi saat halaman dibuka
+  loadMutations();
 }
 
 async function submitStockIn() {
-  // Cek permission
   if (!checkPermission('create')) return;
-  
   const itemId = document.getElementById('in-item-id').value;
   const qty    = document.getElementById('in-qty').value;
   const price  = document.getElementById('in-price').value;
@@ -942,17 +1022,18 @@ async function submitStockIn() {
   const res = await apiPost(`${API}items.php?action=stock_in`, { item_id: itemId, quantity: qty, unit_price: price, notes });
   if (res?.berhasil) {
     showToast('Stok masuk berhasil dicatat', 'success');
-    document.getElementById('in-qty').value = '';
+    document.getElementById('in-qty').value   = '';
     document.getElementById('in-price').value = '';
     document.getElementById('in-notes').value = '';
+    // Set filter ke item yang baru dimutasi lalu reload riwayat
+    document.getElementById('mutation-item-filter').value = itemId;
     loadMutations();
+    loadItems(); // update stok di tabel bahan baku
   } else showToast(res?.pesan || 'Gagal mencatat stok masuk', 'error');
 }
 
 async function submitStockOut() {
-  // Cek permission
   if (!checkPermission('create')) return;
-  
   const itemId = document.getElementById('out-item-id').value;
   const qty    = document.getElementById('out-qty').value;
   const notes  = document.getElementById('out-notes').value;
@@ -960,22 +1041,36 @@ async function submitStockOut() {
   const res = await apiPost(`${API}items.php?action=stock_out`, { item_id: itemId, quantity: qty, notes });
   if (res?.berhasil) {
     showToast('Stok keluar berhasil dicatat', 'success');
-    document.getElementById('out-qty').value = '';
+    document.getElementById('out-qty').value   = '';
     document.getElementById('out-notes').value = '';
+    // Set filter ke item yang baru dimutasi lalu reload riwayat
+    document.getElementById('mutation-item-filter').value = itemId;
     loadMutations();
+    loadItems(); // update stok di tabel bahan baku
   } else showToast(res?.pesan || 'Gagal mencatat stok keluar', 'error');
 }
 
 async function loadMutations() {
   const itemId = document.getElementById('mutation-item-filter').value;
-  if (!itemId) { document.getElementById('mutations-tbody').innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:24px">Pilih item untuk melihat riwayat</td></tr>'; return; }
-  const data = await apiFetch(`${API}items.php?action=transactions&id=${itemId}`);
-  const tbody = document.getElementById('mutations-tbody');
-  if (!data?.data?.length) { tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:24px">Belum ada mutasi</td></tr>'; return; }
+  const tbody  = document.getElementById('mutations-tbody');
+
+  // Tampilkan loading
+  tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:24px">Memuat...</td></tr>';
+
+  // Fetch — kalau itemId kosong = semua item, kalau ada = filter item tertentu
+  const url  = itemId
+    ? `${API}items.php?action=transactions&id=${itemId}`
+    : `${API}items.php?action=transactions_all`;
+  const data = await apiFetch(url);
+
+  if (!data?.data?.length) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:24px">Belum ada riwayat mutasi</td></tr>';
+    return;
+  }
   tbody.innerHTML = data.data.map(t => `
     <tr>
       <td style="font-size:12px">${formatDateTime(t.created_at)}</td>
-      <td>${allItems.find(i=>i.id_items==t.item_id)?.name || '—'}</td>
+      <td>${allItems.find(i => i.id_items == t.item_id)?.name || t.item_name || '—'}</td>
       <td><span class="badge badge-${t.type==='in'?'completed':'cancelled'}">${t.type==='in'?'MASUK':'KELUAR'}</span></td>
       <td style="font-weight:700;color:${t.type==='in'?'var(--success)':'var(--danger)'}">${t.type==='in'?'+':'−'}${parseFloat(t.quantity)}</td>
       <td>${parseFloat(t.stock_before)}</td>
@@ -1816,7 +1911,7 @@ function renderOrderCard(o) {
     const cls       = isCancelled ? 'cancelled' : isDone ? 'done' : isActive ? 'active' : isNext ? 'next-btn' : '';
     const labelCls  = isDone ? 'done-label' : isActive ? 'active-label' : '';
     const title     = isNext ? `Klik → ${step.label}` : step.label;
-    const onclick   = isNext ? `onclick="updateOrderStatus(${o.id_orders},'${step.key}')"` : '';
+    const onclick   = isNext ? `onclick="askUpdateStatus(${o.id_orders},'${o.order_number}','${step.key}','${step.label}')"` : '';
 
     if (idx > 0) {
       stepperHtml += `<div class="step-connector ${isDone ? 'done' : ''}"></div>`;
@@ -1834,7 +1929,7 @@ function renderOrderCard(o) {
   const canCancel = !['completed','cancelled'].includes(o.status);
   const cancelBtn = canCancel
     ? `<button class="btn btn-danger btn-sm" style="font-size:11px;padding:4px 10px"
-         onclick="updateOrderStatus(${o.id_orders},'cancelled')">
+         onclick="askCancelOrder(${o.id_orders},'${o.order_number}')">
          <i data-feather="x"></i> Batalkan
        </button>`
     : '';
@@ -1869,6 +1964,61 @@ function renderOrderCard(o) {
       <div class="status-stepper">${stepperHtml}</div>
       ${isCancelled ? '<div style="font-size:12px;color:var(--danger);margin-top:8px"><i class="bi bi-x-octagon-fill"></i> Order dibatalkan</div>' : ''}
     </div>`;
+}
+
+// Konfirmasi update status stepper
+let _pendingStatusOrderId  = null;
+let _pendingStatusNewStatus = null;
+
+function askUpdateStatus(orderId, orderNum, newStatus, label) {
+  _pendingStatusOrderId   = orderId;
+  _pendingStatusNewStatus = newStatus;
+  document.getElementById('confirm-status-order-num').textContent  = orderNum;
+  document.getElementById('confirm-status-order-next').textContent = label;
+  openModal('modal-confirm-status-order');
+  feather.replace();
+}
+
+async function confirmUpdateStatus() {
+  if (!_pendingStatusOrderId) return;
+  const btn = document.getElementById('confirm-status-order-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<i data-feather="loader"></i> Memproses...';
+  feather.replace();
+
+  await updateOrderStatus(_pendingStatusOrderId, _pendingStatusNewStatus);
+
+  btn.disabled = false;
+  btn.innerHTML = '<i data-feather="check" style="width:14px;height:14px"></i> Ya, Update';
+  feather.replace();
+  closeModal('modal-confirm-status-order');
+  _pendingStatusOrderId   = null;
+  _pendingStatusNewStatus = null;
+}
+
+// Konfirmasi batalkan order
+let _pendingCancelOrderId = null;
+function askCancelOrder(id, orderNum) {
+  _pendingCancelOrderId = id;
+  document.getElementById('confirm-cancel-order-num').textContent = orderNum;
+  openModal('modal-confirm-cancel-order');
+  feather.replace();
+}
+
+async function confirmCancelOrder() {
+  if (!_pendingCancelOrderId) return;
+  const btn = document.getElementById('confirm-cancel-order-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<i data-feather="loader"></i> Membatalkan...';
+  feather.replace();
+
+  await updateOrderStatus(_pendingCancelOrderId, 'cancelled');
+
+  btn.disabled = false;
+  btn.innerHTML = '<i data-feather="x" style="width:14px;height:14px"></i> Ya, Batalkan';
+  feather.replace();
+  closeModal('modal-confirm-cancel-order');
+  _pendingCancelOrderId = null;
 }
 
 async function updateOrderStatus(orderId, newStatus) {
@@ -2072,7 +2222,7 @@ function renderDeliveryCard(d) {
     // "next" untuk arrived → received butuh foto, handle khusus
     const isToReceived = stepNext && step.key === 'received';
     const onclick = stepNext && !isToReceived
-      ? `onclick="updateDeliveryStatus(${d.id_deliveries},'${step.key}')"`
+      ? `onclick="askUpdateDeliveryStatus(${d.id_deliveries},'${d.order_number}','${step.key}','${step.label}')"`
       : '';
 
     if (idx > 0) {
@@ -2137,6 +2287,36 @@ function renderDeliveryCard(d) {
       ${proofZone}
       ${proofDisplay}
     </div>`;
+}
+
+// Konfirmasi update status stepper pengiriman
+let _pendingDeliveryId     = null;
+let _pendingDeliveryStatus = null;
+
+function askUpdateDeliveryStatus(id, orderNum, newStatus, label) {
+  _pendingDeliveryId     = id;
+  _pendingDeliveryStatus = newStatus;
+  document.getElementById('confirm-status-delivery-num').textContent  = orderNum;
+  document.getElementById('confirm-status-delivery-next').textContent = label;
+  openModal('modal-confirm-status-delivery');
+  feather.replace();
+}
+
+async function confirmUpdateDeliveryStatus() {
+  if (!_pendingDeliveryId) return;
+  const btn = document.getElementById('confirm-status-delivery-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<i data-feather="loader"></i> Memproses...';
+  feather.replace();
+
+  await updateDeliveryStatus(_pendingDeliveryId, _pendingDeliveryStatus);
+
+  btn.disabled = false;
+  btn.innerHTML = '<i data-feather="check" style="width:14px;height:14px"></i> Ya, Update';
+  feather.replace();
+  closeModal('modal-confirm-status-delivery');
+  _pendingDeliveryId     = null;
+  _pendingDeliveryStatus = null;
 }
 
 async function updateDeliveryStatus(id, newStatus) {
@@ -2511,13 +2691,14 @@ function renderReportTable(rows, type) {
   if (!rows.length) { wrapper.innerHTML = '<div class="empty-state"><h3>Tidak ada data</h3><p>Coba ubah rentang tanggal</p></div>'; return; }
 
   const headers = {
-    stock: ['Kode','Nama','Kategori','Stok','Min','Maks','Satuan','Nilai','Status'],
-    transactions: ['Waktu','Kode','Nama Item','Tipe','Jumlah','Satuan','Sblm','Sesudah','Harga','Referensi'],
-    orders: ['No. Order','Judul','Status','Prioritas','Customer','Qty','Total','Jatuh Tempo','Selesai'],
+    stock:       ['Kode','Nama','Kategori','Stok','Min','Maks','Satuan','Nilai','Status'],
+    transactions:['Waktu','Kode','Nama Item','Tipe','Jumlah','Satuan','Sblm','Sesudah','Harga','Referensi'],
+    orders:      ['No. Order','Judul','Status','Prioritas','Customer','Qty','Total','Jatuh Tempo','Selesai'],
+    deliveries:  ['No. Order','Pesanan','Pelanggan','Kota Tujuan','Penerima','Tgl. Diterima','Bukti','Total'],
   };
 
   const cols = headers[type] || [];
-  let html = `<table><thead><tr>${cols.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>`;
+  let html = `<table class="table-compact"><thead><tr>${cols.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>`;
 
   rows.forEach(r => {
     if (type === 'stock') {
@@ -2557,6 +2738,27 @@ function renderReportTable(rows, type) {
         <td style="font-size:12px">${formatDate(r.due_date)}</td>
         <td style="font-size:12px">${r.completed_date?formatDateTime(r.completed_date):'—'}</td>
       </tr>`;
+    } else if (type === 'deliveries') {
+      const aktTiba = r.actual_arrival ? formatDate(r.actual_arrival) : '—';
+      const bukti   = r.proof_image
+        ? `<img src="uploads/proof/${r.proof_image}"
+               onclick="openLightbox('uploads/proof/${r.proof_image}')"
+               title="Klik untuk perbesar"
+               style="width:36px;height:36px;object-fit:cover;border-radius:6px;cursor:pointer;border:1px solid var(--border);vertical-align:middle" />`
+        : `<span style="color:var(--text-muted);font-size:11px">—</span>`;
+      html += `<tr>
+        <td style="font-family:monospace;font-size:11px;color:var(--accent);white-space:nowrap"
+            title="Dibuat: ${formatDate(r.created_at)}">${r.order_number}</td>
+        <td style="font-size:12px;font-weight:600;max-width:150px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"
+            title="${r.order_title}">${r.order_title}</td>
+        <td style="font-size:12px;max-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"
+            title="${r.customer}">${r.customer}</td>
+        <td style="font-size:12px;white-space:nowrap">${r.destination_city || '—'}</td>
+        <td style="font-size:12px;white-space:nowrap">${r.recipient_name || '—'}</td>
+        <td style="font-size:11px;white-space:nowrap;color:var(--success);font-weight:600">${aktTiba}</td>
+        <td style="text-align:center">${bukti}</td>
+        <td style="font-size:12px;color:var(--success);font-weight:600;white-space:nowrap;text-align:right">${formatCurrency(r.grand_total)}</td>
+      </tr>`;
     }
   });
 
@@ -2569,7 +2771,7 @@ function exportReport(format = 'csv') {
   const table = document.querySelector('#report-table-wrapper table');
   if (!table) { showToast('Tidak ada data untuk diekspor', 'warning'); return; }
 
-  const reportLabels = { stock: 'Laporan Stok', transactions: 'Mutasi Stok', orders: 'Laporan Order' };
+  const reportLabels = { stock: 'Laporan Stok', transactions: 'Mutasi Stok', orders: 'Laporan Order', deliveries: 'Laporan Pengiriman' };
   const title  = reportLabels[currentReportType] || 'Laporan';
   const from   = document.getElementById('report-from').value;
   const to     = document.getElementById('report-to').value;
