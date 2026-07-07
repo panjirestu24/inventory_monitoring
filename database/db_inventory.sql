@@ -14,7 +14,6 @@ SET time_zone = "+07:00";
 SET FOREIGN_KEY_CHECKS = 0;
 
 -- Drop semua tabel (urutan terbalik karena foreign key)
-DROP TABLE IF EXISTS `notifications`;
 DROP TABLE IF EXISTS `product_materials`;
 DROP TABLE IF EXISTS `order_items`;
 DROP TABLE IF EXISTS `deliveries`;
@@ -163,10 +162,8 @@ CREATE TABLE `orders` (
   `priority`       ENUM('low','normal','high','urgent') NOT NULL DEFAULT 'normal' COMMENT 'Tingkat prioritas pengerjaan',
   `quantity`       INT(11) NOT NULL DEFAULT 1              COMMENT 'Total jumlah pesanan',
   `unit_price`     DECIMAL(15,2) NOT NULL DEFAULT 0        COMMENT 'Harga satuan (Rp)',
-  `total_price`    DECIMAL(15,2) NOT NULL DEFAULT 0        COMMENT 'Total sebelum diskon & pajak (Rp)',
-  `discount`       DECIMAL(15,2) NOT NULL DEFAULT 0        COMMENT 'Potongan harga (Rp)',
-  `tax`            DECIMAL(5,2) NOT NULL DEFAULT 0         COMMENT 'Persentase PPN (%)',
-  `grand_total`    DECIMAL(15,2) NOT NULL DEFAULT 0        COMMENT 'Total akhir setelah diskon & pajak (Rp)',
+  `total_price`    DECIMAL(15,2) NOT NULL DEFAULT 0        COMMENT 'Total harga (Rp)',
+  `grand_total`    DECIMAL(15,2) NOT NULL DEFAULT 0        COMMENT 'Total akhir (Rp)',
   `start_date`     DATE DEFAULT NULL                       COMMENT 'Tanggal mulai produksi',
   `due_date`       DATE DEFAULT NULL                       COMMENT 'Tanggal jatuh tempo selesai',
   `completed_date` DATETIME DEFAULT NULL                   COMMENT 'Waktu order benar-benar selesai',
@@ -246,23 +243,6 @@ CREATE TABLE `stock_transactions` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   COMMENT='Riwayat semua mutasi stok bahan baku (FIFO log)';
 
--- Tabel: notifications (Notifikasi Sistem)
-CREATE TABLE `notifications` (
-  `id_notifications` INT(11) UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Primary Key',
-  `type`             ENUM('low_stock','order_status','system','maintenance') NOT NULL COMMENT 'Jenis notifikasi',
-  `title`            VARCHAR(200) NOT NULL                   COMMENT 'Judul notifikasi',
-  `message`          TEXT NOT NULL                           COMMENT 'Isi pesan notifikasi',
-  `reference_type`   VARCHAR(50) DEFAULT NULL                COMMENT 'Tipe referensi (orders, items, dll)',
-  `reference_id`     INT(11) UNSIGNED DEFAULT NULL           COMMENT 'ID data yang dirujuk',
-  `is_read`          TINYINT(1) NOT NULL DEFAULT 0           COMMENT '0=belum dibaca, 1=sudah dibaca',
-  `user_id`          INT(11) UNSIGNED DEFAULT NULL           COMMENT 'FK → users.id_users (penerima)',
-  `created_at`       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id_notifications`),
-  KEY `fk_notif_user` (`user_id`),
-  CONSTRAINT `fk_notif_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id_users`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-  COMMENT='Notifikasi sistem (stok kritis, status order, dll)';
-
 SET FOREIGN_KEY_CHECKS = 1;
 
 -- ============================================================
@@ -335,11 +315,10 @@ INSERT INTO `products` (`code`, `name`, `category_id`, `unit_id`, `default_price
 ('PRD012', 'Laminating',           6, 9, 15000,  'Laminating glossy/doff, per meter persegi');
 
 -- ============================================================
--- SELESAI — 12 tabel aktif:
+-- SELESAI — 11 tabel aktif:
 --   users, categories, units, customers,
 --   items, products, product_materials, orders,
---   order_items, deliveries, stock_transactions,
---   notifications
+--   order_items, deliveries, stock_transactions
 -- ============================================================
 -- AKUN LOGIN (password = "password"):
 --   admin@ranumindocraft.com     → Admin (akses penuh)

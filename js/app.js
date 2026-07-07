@@ -82,8 +82,10 @@ function applyRoleBasedUI() {
   // Kalau operator, hide tombol hapus aja
   if (role === 'operator') {
     console.log('Mode Operator: Bisa tambah & edit, tidak bisa hapus');
-    hideElements('button[onclick*="delete"]');
-    hideElements('button[onclick*="Hapus"]');
+    hideElements('button[onclick*="deleteItem"]');
+    hideElements('button[onclick*="deleteProduct"]');
+    hideElements('button[onclick*="deleteCustomer"]');
+    hideElements('button[onclick*="confirmDeleteUser"]');
     hideElements('.btn-danger[onclick*="delete"]');
   }
   
@@ -721,10 +723,10 @@ async function renderMesMonitoring() {
 
   // ── Pipeline Kanban ─────────────────────────────────────────
   const pipelineCols = {
-    pending:       { label:'Pending',      color:'#94a3b8', icon:'clock'        },
+    pending:       { label:'Menunggu',     color:'#94a3b8', icon:'clock'        },
     confirmed:     { label:'Dikonfirmasi', color:'#60a5fa', icon:'check-circle' },
     in_progress:   { label:'Diproses',     color:'#fbbf24', icon:'zap'          },
-    quality_check: { label:'Quality Check',color:'#22d3ee', icon:'eye'          },
+    quality_check: { label:'Cek Kualitas', color:'#22d3ee', icon:'eye'          },
   };
 
   const pipelineHtml = `
@@ -1589,9 +1591,7 @@ async function niSimpanOrder() {
 
   // Hitung total dari items
   const sub   = niItems.reduce((s, i) => s + i.qty * i.price, 0);
-  const disc  = parseFloat(document.getElementById('ni-discount').value) || 0;
-  const tax   = parseFloat(document.getElementById('ni-tax').value)      || 11;
-  const grand = (sub - disc) * (1 + tax / 100);
+  const grand = sub;
 
   // Judul = gabungan nama item
   const titleStr = niItems.length === 1
@@ -1607,9 +1607,9 @@ async function niSimpanOrder() {
     description:      niItems.map(i => `${i.name} x${i.qty}`).join(' | '),
     quantity:         niItems.reduce((s, i) => s + i.qty, 0),
     unit_price:       niItems[0].price, // harga item pertama
-    discount:         disc,
-    tax:              tax,
-    grand_total_override: grand, // kirim grand total yang sudah dihitung
+    discount:         0,
+    tax:              0,
+    grand_total_override: grand,
     items:            niItems,   // array semua item
     operator_id:      document.getElementById('ni-operator').value || null,
     priority:         document.getElementById('ni-priority').value,
@@ -1650,24 +1650,15 @@ async function niSimpanOrder() {
 
 // ---- Hitung total ----
 function niHitungTotal() {
-  // Hitung subtotal dari semua item
   const sub = niItems.reduce((s, it) => s + (it.qty * it.price), 0);
-  const disc  = parseFloat(document.getElementById('ni-discount')?.value) || 0;
-  const tax   = parseFloat(document.getElementById('ni-tax')?.value)      || 0;
-  const taxAmt= (sub - disc) * (tax / 100);
-  const total = sub - disc + taxAmt;
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
   set('ni-c-subtotal', formatCurrency(sub));
-  set('ni-c-total',    formatCurrency(total));
+  set('ni-c-total',    formatCurrency(sub));
 }
 
 // ---- Tampilkan Nota ----
 function niTampilkanNota(o, orderNum) {
-  const disc  = parseFloat(o.discount) || 0;
-  const tax   = parseFloat(o.tax)      || 0;
-  const sub   = niItems.reduce((s, i) => s + i.qty * i.price, 0);
-  const taxAmt= (sub - disc) * (tax / 100);
-  const total = sub - disc + taxAmt;
+  const sub = niItems.reduce((s, i) => s + i.qty * i.price, 0);
 
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
   set('ni-nota-num',       orderNum);
@@ -1701,10 +1692,7 @@ function niTampilkanNota(o, orderNum) {
     if (rowEl) rowEl.style.display = '';
   }
 
-  set('ni-nota-subtotal', formatCurrency(sub));
-  set('ni-nota-disc',     '- ' + formatCurrency(disc));
-  set('ni-nota-tax',      '+ ' + formatCurrency(taxAmt));
-  set('ni-nota-total',    formatCurrency(total));
+  set('ni-nota-total',    formatCurrency(sub));
   set('ni-nota-due',      formatDate(o.due_date));
   set('ni-nota-priority', {'low':'Rendah','normal':'Normal','high':'Tinggi','urgent':'URGENT'}[o.priority] || o.priority);
 
@@ -1774,7 +1762,7 @@ function niResetForm() {  ['ni-cust-name','ni-cust-phone','ni-cust-city','ni-cus
   const w = document.getElementById('ni-phone-warning');
   if (w) w.style.display = 'none';
   ['ni-discount','ni-tax'].forEach((id, i) => {
-    const el = document.getElementById(id); if (el) el.value = [0, 11][i];
+    const el = document.getElementById(id); if (el) el.value = [0, 0][i];
   });
   const opSel = document.getElementById('ni-operator');
   if (opSel) opSel.value = '';
@@ -1819,11 +1807,11 @@ function niResetForm() {  ['ni-cust-name','ni-cust-phone','ni-cust-city','ni-cus
 // ============================================================
 let ordersInterval = null;
 const ORDER_STEPS = [
-  { key: 'pending',       label: 'Pending',    icon: 'clock'       },
-  { key: 'confirmed',     label: 'Konfirmasi', icon: 'check-square'},
-  { key: 'in_progress',   label: 'Proses',     icon: 'settings'    },
-  { key: 'quality_check', label: 'QC',         icon: 'shield'      },
-  { key: 'completed',     label: 'Selesai',    icon: 'check-circle'},
+  { key: 'pending',       label: 'Menunggu',      icon: 'clock'       },
+  { key: 'confirmed',     label: 'Dikonfirmasi',  icon: 'check-square'},
+  { key: 'in_progress',   label: 'Diproses',      icon: 'settings'    },
+  { key: 'quality_check', label: 'Cek Kualitas',  icon: 'shield'      },
+  { key: 'completed',     label: 'Selesai',       icon: 'check-circle'},
 ];
 const ORDER_STEP_KEYS = ORDER_STEPS.map(s => s.key);
 
@@ -1957,8 +1945,12 @@ function renderOrderCard(o) {
         <div class="order-card-right">
           <span class="badge badge-${o.priority}">${priorityLabel(o.priority)}</span>
           <span style="font-weight:700;color:var(--success);font-size:13px">${formatCurrency(o.grand_total)}</span>
+          ${!isCancelled && o.status !== 'completed' ? `<button class="btn btn-secondary btn-sm" style="font-size:11px;padding:4px 10px" onclick="openEditOrderModal(${o.id_orders})"><i data-feather="edit-2"></i> Edit</button>` : ''}
           ${cancelBtn}
           ${deliveryBtn}
+          <button class="btn btn-secondary btn-sm" style="font-size:11px;padding:4px 10px" onclick="openNotaModal(${o.id_orders})">
+            <i class="bi bi-receipt"></i> Nota
+          </button>
         </div>
       </div>
       <div class="status-stepper">${stepperHtml}</div>
@@ -2131,6 +2123,167 @@ async function submitNewDelivery() {
 }
 
 // ============================================================
+// EDIT ORDER
+// ============================================================
+async function openEditOrderModal(orderId) {
+  if (!checkPermission('edit')) return;
+  const data  = await apiFetch(`${API}orders.php?action=get&id=${orderId}`);
+  const order = data?.data;
+  if (!order) { showToast('Gagal memuat data order', 'error'); return; }
+
+  document.getElementById('eo-id').value          = order.id_orders;
+  document.getElementById('eo-title').value        = order.title || '';
+  document.getElementById('eo-priority').value     = order.priority || 'normal';
+  document.getElementById('eo-qty').value          = order.quantity || 1;
+  document.getElementById('eo-unit-price').value   = order.unit_price || 0;
+  document.getElementById('eo-start-date').value   = order.start_date || '';
+  document.getElementById('eo-due-date').value     = order.due_date || '';
+  document.getElementById('eo-notes').value        = order.notes || '';
+
+  // Info badge
+  document.getElementById('eo-order-info').innerHTML =
+    `<span style="font-family:monospace;color:var(--accent);font-weight:700">${order.order_number}</span>
+     <span style="color:var(--text-primary);margin-left:8px">${order.customer_name}</span>`;
+
+  // Isi operator select
+  const opSel = document.getElementById('eo-operator');
+  if (opSel.options.length <= 1) {
+    const ops = await apiFetch('api/dashboard.php?action=operators');
+    if (ops?.data) {
+      ops.data.forEach(u => {
+        const opt = document.createElement('option');
+        opt.value = u.id_users;
+        opt.textContent = u.name;
+        opSel.appendChild(opt);
+      });
+    }
+  }
+  opSel.value = order.operator_id || '';
+
+  recalcEditOrder();
+  openModal('modal-edit-order');
+  feather.replace();
+}
+
+function recalcEditOrder() {
+  const qty   = parseFloat(document.getElementById('eo-qty').value)        || 0;
+  const price = parseFloat(document.getElementById('eo-unit-price').value) || 0;
+  const grand = qty * price;
+  document.getElementById('eo-grand-total-display').textContent = formatCurrency(grand);
+}
+
+async function submitEditOrder() {
+  if (!checkPermission('edit')) return;
+  const id    = document.getElementById('eo-id').value;
+  const qty   = parseFloat(document.getElementById('eo-qty').value)        || 0;
+  const price = parseFloat(document.getElementById('eo-unit-price').value) || 0;
+  const title = document.getElementById('eo-title').value.trim();
+
+  if (!title) { showToast('Judul pesanan wajib diisi', 'warning'); return; }
+
+  const grand = qty * price;
+
+  const payload = {
+    id,
+    edit_data:   true,
+    title,
+    priority:    document.getElementById('eo-priority').value,
+    operator_id: document.getElementById('eo-operator').value || null,
+    quantity:    qty,
+    unit_price:  price,
+    total_price: grand,
+    discount:    0,
+    tax:         0,
+    grand_total: grand,
+    start_date:  document.getElementById('eo-start-date').value || null,
+    due_date:    document.getElementById('eo-due-date').value   || null,
+    notes:       document.getElementById('eo-notes').value,
+  };
+
+  const btn = document.querySelector('#modal-edit-order .btn-primary');
+  btn.disabled = true;
+  btn.innerHTML = '<i data-feather="loader"></i> Menyimpan...';
+  feather.replace();
+
+  const res = await apiPut(`${API}orders.php`, payload);
+  btn.disabled = false;
+  btn.innerHTML = '<i data-feather="save"></i> Simpan Perubahan';
+  feather.replace();
+
+  if (res?.success) {
+    showToast('Order berhasil diupdate', 'success');
+    closeModal('modal-edit-order');
+    loadOrders();
+  } else {
+    showToast(res?.message || 'Gagal update order', 'error');
+  }
+}
+
+// ============================================================
+// EDIT DELIVERY
+// ============================================================
+async function openEditDeliveryModal(deliveryId) {
+  if (!checkPermission('edit')) return;
+  const data = await apiFetch(`${API}deliveries.php?action=get&id=${deliveryId}`);
+  const d    = data?.data;
+  if (!d) { showToast('Gagal memuat data pengiriman', 'error'); return; }
+
+  document.getElementById('ed-id').value              = d.id_deliveries;
+  document.getElementById('ed-recipient-name').value  = d.recipient_name  || '';
+  document.getElementById('ed-recipient-phone').value = d.recipient_phone || '';
+  document.getElementById('ed-city').value            = d.destination_city || '';
+  document.getElementById('ed-address').value         = d.destination_address || '';
+  document.getElementById('ed-eta').value             = d.estimated_arrival || '';
+  document.getElementById('ed-notes').value           = d.notes || '';
+
+  document.getElementById('ed-delivery-info').innerHTML =
+    `<span style="font-family:monospace;color:var(--accent);font-weight:700">${d.order_number}</span>
+     <span style="color:var(--text-primary);margin-left:8px">${d.order_title}</span>
+     <span style="color:var(--text-muted);margin-left:8px">${d.customer_name}</span>`;
+
+  openModal('modal-edit-delivery');
+  feather.replace();
+}
+
+async function submitEditDelivery() {
+  if (!checkPermission('edit')) return;
+  const id   = document.getElementById('ed-id').value;
+  const name = document.getElementById('ed-recipient-name').value.trim();
+  const city = document.getElementById('ed-city').value.trim();
+
+  if (!name || !city) { showToast('Nama penerima dan kota wajib diisi', 'warning'); return; }
+
+  const payload = {
+    id,
+    edit_data:           true,
+    recipient_name:      name,
+    recipient_phone:     document.getElementById('ed-recipient-phone').value,
+    destination_city:    city,
+    destination_address: document.getElementById('ed-address').value,
+    estimated_arrival:   document.getElementById('ed-eta').value || null,
+    notes:               document.getElementById('ed-notes').value,
+  };
+
+  const btn = document.querySelector('#modal-edit-delivery .btn-primary');
+  btn.disabled = true;
+  btn.innerHTML = '<i data-feather="loader"></i> Menyimpan...';
+  feather.replace();
+
+  const res = await apiPut(`${API}deliveries.php`, payload);
+  btn.disabled = false;
+  btn.innerHTML = '<i data-feather="save"></i> Simpan Perubahan';
+  feather.replace();
+
+  if (res?.success) {
+    showToast('Data pengiriman berhasil diupdate', 'success');
+    closeModal('modal-edit-delivery');
+    loadDeliveries();
+  } else {
+    showToast(res?.message || 'Gagal update pengiriman', 'error');
+  }
+}
+
+// ============================================================
 // DELIVERIES — realtime stepper card
 // ============================================================
 const DELIV_STEPS = [
@@ -2281,6 +2434,7 @@ function renderDeliveryCard(d) {
         </div>
         <div class="order-card-right">
           <span class="badge badge-delivery-${d.status}">${deliveryStatusLabel(d.status)}</span>
+          ${d.status !== 'received' ? `<button class="btn btn-secondary btn-sm" style="font-size:11px;padding:4px 10px" onclick="openEditDeliveryModal(${d.id_deliveries})"><i data-feather="edit-2"></i> Edit</button>` : ''}
         </div>
       </div>
       <div class="status-stepper">${stepperHtml}</div>
@@ -2636,6 +2790,7 @@ async function lihatHistory(id) {
   const tbody = document.getElementById('history-tbody');
   panel.style.display = 'block';
   tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted)">Memuat...</td></tr>';
+  document.getElementById('history-stats').innerHTML = '';
   panel.scrollIntoView({behavior:'smooth', block:'start'});
 
   const data = await apiFetch(`${API}customers.php?action=history&id=${id}`);
@@ -2645,6 +2800,36 @@ async function lihatHistory(id) {
   document.getElementById('history-panel-phone').textContent = data.customer?.phone || '';
 
   const orders = data.orders || [];
+
+  // ── Render statistik ──
+  const total       = orders.length;
+  const selesai     = orders.filter(o => o.status === 'completed').length;
+  const aktif       = orders.filter(o => !['completed','cancelled'].includes(o.status)).length;
+  const batal       = orders.filter(o => o.status === 'cancelled').length;
+  const totalNilai  = orders.reduce((s, o) => s + parseFloat(o.grand_total || 0), 0);
+  const nilaiSelesai= orders.filter(o => o.status === 'completed').reduce((s, o) => s + parseFloat(o.grand_total || 0), 0);
+
+  const stats = [
+    { label: 'Total Order',     val: total,                     color: '#6366f1', bg: 'rgba(99,102,241,0.1)',  icon: 'file-text'   },
+    { label: 'Selesai',         val: selesai,                   color: '#10b981', bg: 'rgba(16,185,129,0.1)',  icon: 'check-circle'},
+    { label: 'Aktif',           val: aktif,                     color: '#f59e0b', bg: 'rgba(245,158,11,0.1)',  icon: 'activity'    },
+    { label: 'Dibatalkan',      val: batal,                     color: '#ef4444', bg: 'rgba(239,68,68,0.1)',   icon: 'x-circle'    },
+    { label: 'Total Transaksi', val: formatCurrency(totalNilai),color: '#06b6d4', bg: 'rgba(6,182,212,0.1)',   icon: 'dollar-sign' },
+    { label: 'Nilai Selesai',   val: formatCurrency(nilaiSelesai),color:'#10b981',bg: 'rgba(16,185,129,0.08)', icon: 'trending-up' },
+  ];
+
+  document.getElementById('history-stats').innerHTML = stats.map(s => `
+    <div style="background:${s.bg};border:1px solid ${s.color}22;border-radius:10px;padding:12px 14px;display:flex;align-items:center;gap:10px">
+      <div style="width:32px;height:32px;border-radius:8px;background:${s.color}22;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+        <i data-feather="${s.icon}" style="width:15px;height:15px;stroke:${s.color}"></i>
+      </div>
+      <div>
+        <div style="font-size:14px;font-weight:700;color:${s.color};line-height:1">${s.val}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:2px">${s.label}</div>
+      </div>
+    </div>
+  `).join('');
+
   if (!orders.length) {
     tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted)">Belum ada order</td></tr>';
     feather.replace(); return;
@@ -2693,7 +2878,7 @@ function renderReportTable(rows, type) {
   const headers = {
     stock:       ['Kode','Nama','Kategori','Stok','Min','Maks','Satuan','Nilai','Status'],
     transactions:['Waktu','Kode','Nama Item','Tipe','Jumlah','Satuan','Sblm','Sesudah','Harga','Referensi'],
-    orders:      ['No. Order','Judul','Status','Prioritas','Customer','Qty','Total','Jatuh Tempo','Selesai'],
+    orders:      ['No. Order','Judul','Status','Prioritas','Customer','Qty','Total','Jatuh Tempo','Selesai',''],
     deliveries:  ['No. Order','Pesanan','Pelanggan','Kota Tujuan','Penerima','Tgl. Diterima','Bukti','Total'],
   };
 
@@ -2737,6 +2922,7 @@ function renderReportTable(rows, type) {
         <td style="color:var(--success);font-weight:600">${formatCurrency(r.grand_total)}</td>
         <td style="font-size:12px">${formatDate(r.due_date)}</td>
         <td style="font-size:12px">${r.completed_date?formatDateTime(r.completed_date):'—'}</td>
+        <td><button class="btn btn-secondary btn-sm" style="font-size:11px;padding:3px 9px" onclick="openNotaModalByNumber('${r.order_number}')"><i class="bi bi-receipt" style="font-size:12px"></i> Nota</button></td>
       </tr>`;
     } else if (type === 'deliveries') {
       const aktTiba = r.actual_arrival ? formatDate(r.actual_arrival) : '—';
@@ -2822,38 +3008,109 @@ function exportReport(format = 'csv') {
 
     // ── Ambil header & rows dari tabel ──
     const headers = [...table.querySelectorAll('thead th')].map(th => th.innerText.trim());
-    const rows    = [...table.querySelectorAll('tbody tr')].map(tr =>
-      [...tr.querySelectorAll('td')].map(td => td.innerText.trim())
-    );
 
-    // ── autoTable ──
-    doc.autoTable({
-      startY: 34,
-      head: [headers],
-      body: rows,
-      styles: {
-        fontSize: 8,
-        cellPadding: 3,
-        overflow: 'linebreak',
-        textColor: [220, 220, 230],
-        fillColor: [22, 22, 35],
-        lineColor: [50, 50, 70],
-        lineWidth: 0.2,
-      },
-      headStyles: {
-        fillColor: [99, 102, 241],
-        textColor: [255, 255, 255],
-        fontStyle: 'bold',
-        fontSize: 8,
-      },
-      alternateRowStyles: {
-        fillColor: [28, 28, 45],
-      },
-      columnStyles: { 0: { fontStyle: 'bold' } },
-      margin: { left: 14, right: 14 },
-    });
+    // ── Khusus deliveries: ambil data dari allDeliveries agar bisa render foto ──
+    if (currentReportType === 'deliveries') {
+      // Ganti header kolom Bukti jadi teks untuk PDF
+      const pdfHeaders = headers.map(h => h === 'Bukti' ? 'Bukti Diterima' : h);
 
-    // ── Footer ──
+      // Ambil data dari baris tabel, ganti kolom bukti dengan status teks
+      const tabelRows = [...table.querySelectorAll('tbody tr')];
+      const rows = tabelRows.map(tr => {
+        const cells = [...tr.querySelectorAll('td')];
+        return cells.map((td, idx) => {
+          // Kolom bukti = index 6 (No.Order, Pesanan, Pelanggan, Kota, Penerima, Tgl.Diterima, Bukti, Total)
+          if (idx === 6) {
+            const img = td.querySelector('img');
+            return img ? '✓ Ada foto' : '—';
+          }
+          return td.innerText.trim();
+        });
+      });
+
+      doc.autoTable({
+        startY: 34,
+        head: [pdfHeaders],
+        body: rows,
+        styles: {
+          fontSize: 8, cellPadding: 3, overflow: 'linebreak',
+          textColor: [220, 220, 230], fillColor: [22, 22, 35],
+          lineColor: [50, 50, 70], lineWidth: 0.2,
+        },
+        headStyles: { fillColor: [99, 102, 241], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
+        alternateRowStyles: { fillColor: [28, 28, 45] },
+        columnStyles: { 0: { fontStyle: 'bold' } },
+        margin: { left: 14, right: 14 },
+        didDrawCell(data) {
+          // Render foto di kolom bukti (kolom index 6)
+          if (data.section === 'body' && data.column.index === 6) {
+            const rowIdx = data.row.index;
+            const tr     = tabelRows[rowIdx];
+            if (!tr) return;
+            const img = tr.querySelectorAll('td')[6]?.querySelector('img');
+            if (!img || !img.complete || img.naturalWidth === 0) return;
+            try {
+              const canvas  = document.createElement('canvas');
+              canvas.width  = img.naturalWidth;
+              canvas.height = img.naturalHeight;
+              canvas.getContext('2d').drawImage(img, 0, 0);
+              const imgData = canvas.toDataURL('image/jpeg', 0.7);
+              const cellW   = data.cell.width  - 4;
+              const cellH   = data.cell.height - 4;
+              const size    = Math.min(cellW, cellH, 18);
+              doc.addImage(
+                imgData, 'JPEG',
+                data.cell.x + (cellW - size) / 2 + 2,
+                data.cell.y + (cellH - size) / 2 + 2,
+                size, size
+              );
+            } catch(e) { /* cross-origin atau gambar belum load */ }
+          }
+        },
+        // Beri tinggi baris lebih untuk kolom foto
+        rowPageBreak: 'auto',
+        bodyStyles: { minCellHeight: 22 },
+      });
+
+      // ── Ringkasan di bawah tabel ──
+      const finalY = doc.lastAutoTable.finalY + 8;
+      if (finalY < doc.internal.pageSize.height - 20) {
+        const totalVal = [...table.querySelectorAll('tbody tr')].reduce((s, tr) => {
+          const cells = tr.querySelectorAll('td');
+          const txt   = cells[cells.length - 1]?.innerText.replace(/[^0-9]/g, '') || '0';
+          return s + parseInt(txt);
+        }, 0);
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(100, 220, 160);
+        doc.text(`Total Nilai Pengiriman: ${formatCurrency(totalVal)}`, 14, finalY);
+        doc.setTextColor(150, 150, 180);
+        doc.setFont('helvetica', 'normal');
+        doc.text(`Jumlah Pengiriman: ${table.querySelectorAll('tbody tr').length} pengiriman`, 14, finalY + 6);
+      }
+
+    } else {
+      // ── Tipe laporan lain (stock, transactions, orders) ──
+      const rows = [...table.querySelectorAll('tbody tr')].map(tr =>
+        [...tr.querySelectorAll('td')].map(td => td.innerText.trim())
+      );
+      doc.autoTable({
+        startY: 34,
+        head: [headers],
+        body: rows,
+        styles: {
+          fontSize: 8, cellPadding: 3, overflow: 'linebreak',
+          textColor: [220, 220, 230], fillColor: [22, 22, 35],
+          lineColor: [50, 50, 70], lineWidth: 0.2,
+        },
+        headStyles: { fillColor: [99, 102, 241], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
+        alternateRowStyles: { fillColor: [28, 28, 45] },
+        columnStyles: { 0: { fontStyle: 'bold' } },
+        margin: { left: 14, right: 14 },
+      });
+    }
+
+    // ── Footer halaman ──
     const pageCount = doc.getNumberOfPages();
     for (let i = 1; i <= pageCount; i++) {
       doc.setPage(i);
@@ -2869,6 +3126,144 @@ function exportReport(format = 'csv') {
     doc.save(filename + '.pdf');
     showToast('Laporan PDF berhasil diekspor', 'success');
   }
+}
+
+// ============================================================
+// NOTA INVOICE MODAL
+// ============================================================
+async function openNotaModal(orderId) {
+  openModal('modal-nota-invoice');
+  const body = document.getElementById('modal-nota-body');
+  body.innerHTML = '<div style="text-align:center;padding:32px;color:var(--text-muted)"><div style="width:24px;height:24px;border:2px solid var(--border);border-top-color:var(--primary);border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 12px"></div>Memuat nota...</div>';
+
+  const res = await apiFetch(`${API}orders.php?action=get&id=${orderId}`);
+  const o   = res?.data;
+  if (!o) { body.innerHTML = '<div style="text-align:center;padding:32px;color:var(--danger)">Gagal memuat data order</div>'; return; }
+
+  body.innerHTML = buildNotaHTML(o);
+  feather.replace();
+}
+
+async function openNotaModalByNumber(orderNumber) {
+  openModal('modal-nota-invoice');
+  const body = document.getElementById('modal-nota-body');
+  body.innerHTML = '<div style="text-align:center;padding:32px;color:var(--text-muted)"><div style="width:24px;height:24px;border:2px solid var(--border);border-top-color:var(--primary);border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 12px"></div>Memuat nota...</div>';
+
+  // Cari id_orders dari allOrders terlebih dulu, atau dari report data
+  let orderId = null;
+
+  // Cek di allOrders (halaman order aktif/riwayat)
+  const fromAll = allOrders.find(x => x.order_number === orderNumber);
+  if (fromAll) {
+    orderId = fromAll.id_orders;
+  } else {
+    // Fetch list dengan search
+    const res  = await apiFetch(`${API}orders.php?action=list&search=${encodeURIComponent(orderNumber)}&statuses[]=completed&statuses[]=cancelled`);
+    const list = res?.data || [];
+    const found = list.find(x => x.order_number === orderNumber);
+    if (found) orderId = found.id_orders;
+  }
+
+  if (!orderId) {
+    body.innerHTML = '<div style="text-align:center;padding:32px;color:var(--danger)">Data order tidak ditemukan</div>';
+    return;
+  }
+
+  const detail = await apiFetch(`${API}orders.php?action=get&id=${orderId}`);
+  const order  = detail?.data;
+  if (!order) { body.innerHTML = '<div style="text-align:center;padding:32px;color:var(--danger)">Gagal memuat data order</div>'; return; }
+
+  body.innerHTML = buildNotaHTML(order);
+  feather.replace();
+}
+
+function buildNotaHTML(o) {
+  const total = parseFloat(o.grand_total) || 0;
+  const today = new Date().toLocaleDateString('id-ID', { day:'2-digit', month:'long', year:'numeric' });
+
+  return `
+    <div id="nota-invoice-content">
+      <!-- Header -->
+      <div style="text-align:center;border-bottom:2px solid var(--border);padding-bottom:14px;margin-bottom:16px">
+        <div style="font-size:18px;font-weight:800;color:var(--primary)"><img src="logo.png" alt="Logo" style="width:22px;height:22px;object-fit:contain;vertical-align:middle;margin-right:6px;border-radius:4px"> Ranum Indocraft</div>
+        <div style="font-size:11px;color:var(--text-muted)">Sistem Inventory & Monitoring Percetakan</div>
+      </div>
+      <!-- Nota label -->
+      <div style="text-align:center;margin-bottom:16px">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted)">NOTA PESANAN</div>
+        <div style="font-size:22px;font-weight:900;font-family:monospace;color:var(--accent);margin-top:4px">${o.order_number}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:2px">Tanggal: ${today}</div>
+      </div>
+      <!-- Data Pelanggan -->
+      <div style="background:var(--bg-base);border-radius:var(--radius-sm);padding:12px;margin-bottom:12px">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px">Data Pelanggan</div>
+        <table style="width:100%;font-size:12px;border-collapse:collapse">
+          <tr><td style="color:var(--text-muted);width:80px;padding:2px 0">Nama</td><td style="font-weight:600">: ${o.customer_name}</td></tr>
+          ${o.customer_phone ? `<tr><td style="color:var(--text-muted);padding:2px 0">No. HP</td><td>: ${o.customer_phone}</td></tr>` : ''}
+          ${o.customer_city  ? `<tr><td style="color:var(--text-muted);padding:2px 0">Kota</td><td>: ${o.customer_city}</td></tr>` : ''}
+        </table>
+      </div>
+      <!-- Detail Pesanan -->
+      <div style="margin-bottom:12px">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px">Detail Pesanan</div>
+        <table style="width:100%;font-size:12px;border-collapse:collapse">
+          <tr><td style="color:var(--text-muted);width:80px;padding:2px 0">Pesanan</td><td style="font-weight:600">: ${o.title}</td></tr>
+          <tr><td style="color:var(--text-muted);padding:2px 0">Jumlah</td><td>: ${parseInt(o.quantity).toLocaleString('id-ID')} pcs</td></tr>
+          <tr><td style="color:var(--text-muted);padding:2px 0">Harga/pcs</td><td>: ${formatCurrency(o.unit_price)}</td></tr>
+          ${o.notes ? `<tr><td style="color:var(--text-muted);padding:2px 0">Catatan</td><td>: ${o.notes}</td></tr>` : ''}
+        </table>
+      </div>
+      <!-- Total -->
+      <div style="border-top:1px dashed var(--border);padding-top:10px;margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;font-size:15px;font-weight:800;border-top:2px solid var(--border);padding-top:8px">
+          <span>TOTAL</span><span style="color:var(--success)">${formatCurrency(total)}</span>
+        </div>
+      </div>
+      <!-- Info produksi -->
+      <div style="background:var(--bg-base);border-radius:var(--radius-sm);padding:10px;margin-bottom:12px;font-size:11px">
+        <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+          <span style="color:var(--text-muted)">Jatuh Tempo</span>
+          <span style="font-weight:600">${formatDate(o.due_date)}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+          <span style="color:var(--text-muted)">Prioritas</span>
+          <span>${priorityLabel(o.priority)}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between">
+          <span style="color:var(--text-muted)">Status</span>
+          <span class="badge badge-${o.status}" style="font-size:10px;padding:2px 8px">${statusLabel(o.status)}</span>
+        </div>
+      </div>
+      <!-- Link tracking -->
+      <div style="border:1px dashed rgba(99,102,241,0.4);border-radius:var(--radius-sm);padding:10px;text-align:center;margin-bottom:16px">
+        <div style="font-size:10px;color:var(--text-muted);margin-bottom:3px">Cek status pesanan di:</div>
+        <div style="font-size:11px;font-weight:600;color:var(--accent)">localhost/inventory_monitoring/track.php</div>
+        <div style="font-size:10px;color:var(--text-muted);margin-top:3px">Nomor Order:</div>
+        <div style="font-size:15px;font-weight:800;font-family:monospace;color:var(--primary);margin-top:2px">${o.order_number}</div>
+      </div>
+      <!-- TTD -->
+      <div style="display:flex;justify-content:space-between;font-size:11px">
+        <div style="text-align:center">
+          <div style="color:var(--text-muted);margin-bottom:30px">Kasir</div>
+          <div style="border-top:1px solid var(--border);padding-top:4px;min-width:90px">(________________)</div>
+        </div>
+        <div style="text-align:center">
+          <div style="color:var(--text-muted);margin-bottom:30px">Pelanggan</div>
+          <div style="border-top:1px solid var(--border);padding-top:4px;min-width:90px">(________________)</div>
+        </div>
+      </div>
+    </div>`;
+}
+
+function cetakNotaInvoice() {
+  const nota = document.getElementById('nota-invoice-content');
+  if (!nota) return;
+  const root = document.getElementById('print-nota-root');
+  root.innerHTML = '';
+  const clone = nota.cloneNode(true);
+  root.appendChild(clone);
+  window.print();
+  setTimeout(() => { root.innerHTML = ''; }, 1000);
 }
 
 // ============================================================
@@ -2995,7 +3390,18 @@ function isDueSoon(d) {
 }
 
 function statusLabel(s) {
-  const map = { pending:'Pending', confirmed:'Konfirmasi', in_progress:'Proses', quality_check:'QC', completed:'Selesai', cancelled:'Batal', active:'Aktif', idle:'Idle', maintenance:'Maintenance', offline:'Offline' };
+  const map = {
+    pending:       'Menunggu',
+    confirmed:     'Dikonfirmasi',
+    in_progress:   'Diproses',
+    quality_check: 'Cek Kualitas',
+    completed:     'Selesai',
+    cancelled:     'Dibatalkan',
+    active:        'Aktif',
+    idle:          'Diam',
+    maintenance:   'Maintenance',
+    offline:       'Offline',
+  };
   return map[s] || s;
 }
 

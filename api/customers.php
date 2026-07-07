@@ -124,6 +124,17 @@ switch ($method) {
     
     case 'DELETE':
         $id = (int)($_GET['id'] ?? 0);
+        // Cek apakah pelanggan punya order
+        $cek = $pdo->prepare("SELECT COUNT(*) FROM orders WHERE customer_id = ?");
+        $cek->execute([$id]);
+        if ((int)$cek->fetchColumn() > 0) {
+            echo json_encode([
+                'success' => false,
+                'berhasil' => false,
+                'message' => 'Pelanggan tidak bisa dihapus karena memiliki riwayat order. Nonaktifkan saja jika tidak ingin ditampilkan.'
+            ]);
+            exit;
+        }
         $pdo->prepare("DELETE FROM customers WHERE id_customers=?")->execute([$id]);
         echo json_encode(['success' => true, 'berhasil' => true, 'pesan' => 'Pelanggan berhasil dihapus', 'message' => 'Pelanggan berhasil dihapus']);
         break;

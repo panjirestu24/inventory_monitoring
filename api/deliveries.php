@@ -226,6 +226,34 @@ switch ($method) {
     case 'PUT':
         $data      = json_decode(file_get_contents('php://input'), true) ?? [];
         $id        = (int)($data['id'] ?? 0);
+
+        // ── Edit data pengiriman ──
+        if (!empty($data['edit_data'])) {
+            $stmt = $pdo->prepare(
+                "UPDATE deliveries SET
+                    recipient_name      = ?,
+                    recipient_phone     = ?,
+                    destination_city    = ?,
+                    destination_address = ?,
+                    estimated_arrival   = ?,
+                    notes               = ?,
+                    updated_at          = NOW()
+                 WHERE id_deliveries = ?"
+            );
+            $stmt->execute([
+                $data['recipient_name']      ?? '',
+                $data['recipient_phone']     ?? '',
+                $data['destination_city']    ?? '',
+                $data['destination_address'] ?? '',
+                $data['estimated_arrival']   ?: null,
+                $data['notes']               ?? '',
+                $id,
+            ]);
+            echo json_encode(['success' => true, 'message' => 'Data pengiriman berhasil diupdate']);
+            break;
+        }
+
+        // ── Update status biasa ──
         $newStatus = $data['status'] ?? '';
 
         if (!in_array($newStatus, ['prepared', 'shipping', 'arrived'])) {

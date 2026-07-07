@@ -580,22 +580,6 @@ $userInfo = getUserInfo();
                   <span style="color:var(--text-muted)">Subtotal</span>
                   <span id="ni-c-subtotal" style="font-weight:600">Rp 0</span>
                 </div>
-                <div class="flex justify-between mb-4" style="font-size:13px">
-                  <span style="color:var(--text-muted)">Diskon (Rp)</span>
-                  <div style="display:flex;align-items:center;gap:8px">
-                    <input type="number" id="ni-discount" value="0" min="0"
-                      style="width:100px;background:var(--bg-input);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);padding:4px 8px;font-size:12px;text-align:right"
-                      oninput="niHitungTotal()" />
-                  </div>
-                </div>
-                <div class="flex justify-between mb-4" style="font-size:13px">
-                  <span style="color:var(--text-muted)">PPN (%)</span>
-                  <div style="display:flex;align-items:center;gap:8px">
-                    <input type="number" id="ni-tax" value="11" min="0" max="100"
-                      style="width:60px;background:var(--bg-input);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);padding:4px 8px;font-size:12px;text-align:right"
-                      oninput="niHitungTotal()" />
-                  </div>
-                </div>
                 <div class="divider"></div>
                 <div class="flex justify-between">
                   <span style="font-weight:700;font-size:15px">TOTAL</span>
@@ -658,7 +642,7 @@ $userInfo = getUserInfo();
             <div id="ni-nota-content" style="display:none;position:sticky;top:90px">
               <div class="card" id="ni-nota-print" style="padding:24px;font-size:13px">
                 <div style="text-align:center;border-bottom:2px solid var(--border);padding-bottom:14px;margin-bottom:14px">
-                <div style="font-size:18px;font-weight:800;color:var(--primary)"><i class="bi bi-printer-fill"></i> Ranum Indocraft</div>
+                <div style="font-size:18px;font-weight:800;color:var(--primary)"><img src="logo.png" alt="Logo" style="width:22px;height:22px;object-fit:contain;vertical-align:middle;margin-right:6px;border-radius:4px"> Ranum Indocraft</div>
                   <div style="font-size:11px;color:var(--text-muted)">Sistem Inventory & Monitoring Percetakan</div>
                 </div>
                 <div style="text-align:center;margin-bottom:16px">
@@ -688,9 +672,6 @@ $userInfo = getUserInfo();
                   </table>
                 </div>
                 <div style="border-top:1px dashed var(--border);padding-top:10px;margin-bottom:12px">
-                  <div class="flex justify-between" style="font-size:12px;margin-bottom:4px"><span style="color:var(--text-muted)">Subtotal</span><span id="ni-nota-subtotal"></span></div>
-                  <div class="flex justify-between" style="font-size:12px;margin-bottom:4px"><span style="color:var(--text-muted)">Diskon</span><span id="ni-nota-disc" style="color:var(--danger)"></span></div>
-                  <div class="flex justify-between" style="font-size:12px;margin-bottom:8px"><span style="color:var(--text-muted)">PPN</span><span id="ni-nota-tax"></span></div>
                   <div class="flex justify-between" style="font-size:15px;font-weight:800;border-top:2px solid var(--border);padding-top:8px">
                     <span>TOTAL</span><span id="ni-nota-total" style="color:var(--success)"></span>
                   </div>
@@ -806,8 +787,10 @@ $userInfo = getUserInfo();
                 <i data-feather="x"></i> Tutup
               </button>
             </div>
+            <!-- Ringkasan statistik pelanggan -->
+            <div id="history-stats" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;padding:0 0 16px 0;margin-bottom:16px;border-bottom:1px solid var(--border)"></div>
             <div class="table-wrapper">
-              <table>
+              <table class="table-compact">
                 <thead>
                   <tr>
                     <th>No. Order</th>
@@ -1043,6 +1026,115 @@ $userInfo = getUserInfo();
         <button type="submit" class="btn btn-primary"><i data-feather="save"></i> Simpan</button>
       </div>
     </form>
+  </div>
+</div>
+
+<!-- Modal: Edit Order -->
+<div class="modal-overlay" id="modal-edit-order">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title"><i data-feather="edit-2" style="width:16px;height:16px;stroke:var(--accent)"></i> Edit Order</div>
+      <button class="modal-close" onclick="closeModal('modal-edit-order')"><i data-feather="x"></i></button>
+    </div>
+    <input type="hidden" id="eo-id" />
+    <div id="eo-order-info" style="background:var(--bg-base);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:16px;font-size:12px;color:var(--text-muted)"></div>
+    <div class="form-group">
+      <label class="form-label">Judul / Nama Pesanan *</label>
+      <input class="form-control" id="eo-title" required placeholder="Contoh: Brosur A4 2 sisi" />
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Prioritas</label>
+        <select class="form-control" id="eo-priority">
+          <option value="low">Rendah</option>
+          <option value="normal" selected>Normal</option>
+          <option value="high">Tinggi</option>
+          <option value="urgent">Urgent</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Operator</label>
+        <select class="form-control" id="eo-operator">
+          <option value="">-- Tidak Ditugaskan --</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Jumlah (Qty)</label>
+        <input type="number" class="form-control" id="eo-qty" min="1" value="1" oninput="recalcEditOrder()" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Harga Satuan (Rp)</label>
+        <input type="number" class="form-control" id="eo-unit-price" min="0" value="0" oninput="recalcEditOrder()" />
+      </div>
+    </div>
+    <div style="background:var(--bg-base);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center">
+      <span style="font-size:13px;color:var(--text-muted)">Grand Total</span>
+      <span id="eo-grand-total-display" style="font-size:16px;font-weight:700;color:var(--success)">Rp 0</span>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Tanggal Mulai</label>
+        <input type="date" class="form-control" id="eo-start-date" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Jatuh Tempo</label>
+        <input type="date" class="form-control" id="eo-due-date" />
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Catatan</label>
+      <textarea class="form-control" id="eo-notes" rows="2" placeholder="Instruksi khusus..."></textarea>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-secondary" onclick="closeModal('modal-edit-order')">Batal</button>
+      <button class="btn btn-primary" onclick="submitEditOrder()"><i data-feather="save"></i> Simpan Perubahan</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Edit Pengiriman -->
+<div class="modal-overlay" id="modal-edit-delivery">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title"><i data-feather="edit-2" style="width:16px;height:16px;stroke:var(--accent)"></i> Edit Data Pengiriman</div>
+      <button class="modal-close" onclick="closeModal('modal-edit-delivery')"><i data-feather="x"></i></button>
+    </div>
+    <input type="hidden" id="ed-id" />
+    <div id="ed-delivery-info" style="background:var(--bg-base);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:16px;font-size:12px;color:var(--text-muted)"></div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Nama Penerima *</label>
+        <input class="form-control" id="ed-recipient-name" required placeholder="Nama penerima" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">No. Telepon Penerima</label>
+        <input class="form-control" id="ed-recipient-phone" placeholder="08xx-xxxx-xxxx" />
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Kota Tujuan *</label>
+        <input class="form-control" id="ed-city" required placeholder="Jakarta" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Estimasi Tiba</label>
+        <input type="date" class="form-control" id="ed-eta" />
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Alamat Lengkap Tujuan</label>
+      <textarea class="form-control" id="ed-address" rows="2" placeholder="Jl. Merdeka No. 10..."></textarea>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Catatan</label>
+      <textarea class="form-control" id="ed-notes" rows="2" placeholder="Instruksi pengiriman..."></textarea>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-secondary" onclick="closeModal('modal-edit-delivery')">Batal</button>
+      <button class="btn btn-primary" onclick="submitEditDelivery()"><i data-feather="save"></i> Simpan Perubahan</button>
+    </div>
   </div>
 </div>
 
@@ -1365,6 +1457,24 @@ $userInfo = getUserInfo();
 
 <!-- ===== PRINT ROOT — hanya elemen ini yang tampil saat Ctrl+P ===== -->
 <div id="print-nota-root"></div>
+
+<!-- Modal Nota Invoice -->
+<div class="modal-overlay" id="modal-nota-invoice">
+  <div class="modal" style="max-width:440px;width:100%;padding:0;display:flex;flex-direction:column;max-height:88vh">
+    <div class="modal-header" style="padding:16px 20px;margin-bottom:0;border-bottom:1px solid var(--border);flex-shrink:0">
+      <div class="modal-title" style="font-size:15px"><i data-feather="file-text" style="width:15px;height:15px;stroke:var(--accent)"></i> Nota Invoice</div>
+      <button class="modal-close" onclick="closeModal('modal-nota-invoice')"><i data-feather="x"></i></button>
+    </div>
+    <div id="modal-nota-body" style="padding:24px;font-size:13px;overflow-y:auto;flex:1">
+      <div style="text-align:center;padding:32px;color:var(--text-muted)">Memuat...</div>
+    </div>
+    <div style="border-top:1px solid var(--border);padding:14px 20px;display:flex;justify-content:flex-end;gap:10px;flex-shrink:0;background:var(--bg-card)">
+      <button class="btn btn-primary" onclick="cetakNotaInvoice()">
+        <i data-feather="printer"></i> Cetak
+      </button>
+    </div>
+  </div>
+</div>
 
 <!-- Modal Konfirmasi Update Status Pengiriman (Stepper) -->
 <div class="modal-overlay" id="modal-confirm-status-delivery">

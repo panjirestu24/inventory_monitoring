@@ -45,7 +45,15 @@ switch ($method) {
             echo json_encode(['success' => true, 'data' => $stmt->fetchAll()]);
         } elseif ($action === 'get') {
             $id = (int)($_GET['id'] ?? 0);
-            $stmt = $pdo->prepare("SELECT o.*, c.name as customer_name FROM orders o JOIN customers c ON o.customer_id=c.id_customers WHERE o.id_orders=?");
+            $stmt = $pdo->prepare(
+                "SELECT o.*, c.name as customer_name, c.phone as customer_phone,
+                        c.city as customer_city, c.address as customer_address,
+                        u.name as operator_name
+                 FROM orders o
+                 JOIN customers c ON o.customer_id = c.id_customers
+                 LEFT JOIN users u ON o.operator_id = u.id_users
+                 WHERE o.id_orders = ?"
+            );
             $stmt->execute([$id]);
             $order = $stmt->fetch();
             $stmt2 = $pdo->prepare("SELECT oi.*, i.name as item_name, u.symbol FROM order_items oi JOIN items i ON oi.item_id=i.id_items JOIN units u ON i.unit_id=u.id_units WHERE oi.order_id=?");
@@ -168,8 +176,6 @@ switch ($method) {
 
                 $qty      = (float)($data['quantity']   ?? 1);
                 $price    = (float)($data['unit_price']  ?? 0);
-                $discount = (float)($data['discount']    ?? 0);
-                $tax      = (float)($data['tax']         ?? 11);
                 $items    = $data['items'] ?? [];
 
                 // Kalau ada multi-item, hitung dari items
@@ -241,15 +247,15 @@ switch ($method) {
                 if (!empty($data['grand_total_override'])) {
                     $grand = (float)$data['grand_total_override'];
                 } else {
-                    $grand = ($total - $discount) * (1 + $tax / 100);
+                    $grand = (float)($data['grand_total_override'] ?? $total);
                 }
 
                 $pdo->prepare(
                     "INSERT INTO orders
                      (order_number, customer_id, operator_id, title, description,
-                      status, priority, quantity, unit_price, total_price, discount, tax,
+                      status, priority, quantity, unit_price, total_price,
                       grand_total, start_date, due_date, notes, created_by)
-                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
                 )->execute([
                     $orderNum, $customerId,
                     isset($data['operator_id']) && $data['operator_id'] ? $data['operator_id'] : null,
@@ -257,7 +263,7 @@ switch ($method) {
                     $data['description'] ?? '',
                     'pending',
                     $data['priority'] ?? 'normal',
-                    $qty, $price, $total, $discount, $tax, $grand,
+                    $qty, $price, $total, $grand,
                     $data['start_date'] ?? null,
                     $data['due_date']   ?? null,
                     $data['notes']      ?? '',
@@ -375,16 +381,13 @@ switch ($method) {
         $seq = str_pad($stmt->fetchColumn(), 4, '0', STR_PAD_LEFT);
         $orderNum = $prefix . '-' . date('ym') . '-' . $seq;
 
-        $stmt = $pdo->prepare("INSERT INTO orders (order_number, customer_id, operator_id, title, description, status, priority, quantity, unit_price, total_price, discount, tax, grand_total, start_date, due_date, notes) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
+        $stmt = $pdo->prepare("INSERT INTO orders (order_number, customer_id, operator_id, title, description, status, priority, quantity, unit_price, total_price, grand_total, start_date, due_date, notes) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
         $total = ($data['quantity'] ?? 1) * ($data['unit_price'] ?? 0);
-        $discount = $data['discount'] ?? 0;
-        $tax = $data['tax'] ?? 11;
-        $grand = ($total - $discount) * (1 + $tax / 100);
         $stmt->execute([
             $orderNum, $data['customer_id'], $data['operator_id'] ?: null,
             $data['title'], $data['description'] ?? '', $data['status'] ?? 'pending',
             $data['priority'] ?? 'normal', $data['quantity'] ?? 1,
-            $data['unit_price'] ?? 0, $total, $discount, $tax, $grand,
+            $data['unit_price'] ?? 0, $total, $total,
             $data['start_date'] ?? null, $data['due_date'] ?? null, $data['notes'] ?? ''
         ]);
         echo json_encode(['success' => true, 'message' => 'Order berhasil dibuat', 'order_number' => $orderNum]);
@@ -393,6 +396,42 @@ switch ($method) {
     case 'PUT':
         $data = json_decode(file_get_contents('php://input'), true);
         $id = (int)$data['id'];
+
+        // ── Edit data order lengkap ──
+        if (!empty($data['edit_data'])) {
+            $qty      = (float)($data['quantity']    ?? 1);
+            $price    = (float)($data['unit_price']  ?? 0);
+            $total    = (float)($data['total_price'] ?? $qty * $price);
+            $grand    = (float)($data['grand_total'] ?? $total);
+
+            $stmt = $pdo->prepare(
+                "UPDATE orders SET
+                    title       = ?,
+                    priority    = ?,
+                    operator_id = ?,
+                    quantity    = ?,
+                    unit_price  = ?,
+                    total_price = ?,
+                    grand_total = ?,
+                    start_date  = ?,
+                    due_date    = ?,
+                    notes       = ?,
+                    updated_at  = NOW()
+                 WHERE id_orders = ?"
+            );
+            $stmt->execute([
+                $data['title'],
+                $data['priority']    ?? 'normal',
+                $data['operator_id'] ?: null,
+                $qty, $price, $total, $grand,
+                $data['start_date']  ?: null,
+                $data['due_date']    ?: null,
+                $data['notes']       ?? '',
+                $id,
+            ]);
+            echo json_encode(['success' => true, 'message' => 'Order berhasil diupdate']);
+            break;
+        }
 
         // Update status saja (realtime stepper)
         if (isset($data['status_only']) && $data['status_only']) {

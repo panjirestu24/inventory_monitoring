@@ -101,8 +101,7 @@ $stmt = $pdo->query(
 $chartCompleted = $stmt->fetchAll();
 
 // --- NOTIFIKASI TERBARU (5 Teratas) ---
-$stmt = $pdo->query("SELECT * FROM notifications ORDER BY created_at DESC LIMIT 5");
-$notifications = $stmt->fetchAll();
+$notifications = [];
 
 // Kirim semua data dalam format JSON
 echo json_encode([
