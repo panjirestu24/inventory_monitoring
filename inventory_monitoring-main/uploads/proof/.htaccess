@@ -1,0 +1,19 @@
+# Blokir eksekusi semua jenis script di folder ini
+# Hanya izinkan akses ke file gambar
+
+# Nonaktifkan eksekusi PHP
+php_flag engine off
+
+# Blokir akses ke file selain gambar
+<FilesMatch "(?i)\.(php|php3|php4|php5|php7|phtml|pl|py|jsp|asp|aspx|sh|cgi|exe)$">
+    Require all denied
+</FilesMatch>
+
+# Paksa content-type sebagai gambar (cegah MIME sniffing)
+<FilesMatch "(?i)\.(jpg|jpeg|png|gif|webp)$">
+    Header set Content-Type "image/jpeg"
+    Header set X-Content-Type-Options "nosniff"
+</FilesMatch>
+
+# Nonaktifkan directory listing
+Options -Indexes
